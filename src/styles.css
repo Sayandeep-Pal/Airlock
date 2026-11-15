@@ -91,3 +91,34 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
 @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+
+h3 { font-size: 0.85rem; margin: 12px 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 12px; }
+select {
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+/* Detected PII: green = deterministic pattern, purple = Gemini Nano. */
+:root { --pattern: #0f7a4a; --pattern-bg: #d9f2e5; --nano: #6b3fc4; --nano-bg: #ece3fb; }
+@media (prefers-color-scheme: dark) {
+  :root { --pattern: #5fd39b; --pattern-bg: #16382a; --nano: #c3a6ff; --nano-bg: #2d2150; }
+}
+mark.pii { border-radius: 4px; padding: 0 2px; }
+mark.pii.pattern { color: var(--pattern); background: var(--pattern-bg); }
+mark.pii.nano { color: var(--nano); background: var(--nano-bg); }
+mark.pii sup { font-size: 0.6rem; font-weight: 700; margin-left: 2px; opacity: 0.8; }
+.highlighted { min-height: 100%; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 8px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }
+tr.total td { font-weight: 700; }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted); }
+.misses { padding-left: 18px; font-size: 0.85rem; }
+.misses li { margin: 6px 0; }

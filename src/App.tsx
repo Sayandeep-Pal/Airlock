@@ -1,14 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CLOUD_MODEL, firebase } from './firebase';
 import { run, warmUpDeviceModel, type Route, type RunResult } from './ai/models';
 import { NANO_HELP, nanoStatus, type NanoStatus } from './ai/nano';
-import { detectPatterns } from './redact/patterns';
-import { findLeaks, redact } from './redact/vault';
-
-const SAMPLE = `Patient: Priya Raman, DOB 14/02/1988
-Email priya.raman@example.org, phone +91 98765 43210
-Card on file 4111 1111 1111 1111. PAN ABCPE1234F.
-Diagnosis: Type 2 diabetes, follow-up on March 3, 2026.`;
+import { EvalPanel } from './components/EvalPanel';
+import { RedactionPanel } from './components/RedactionPanel';
 
 const ROUTES: { route: Route; label: string; note: string }[] = [
   { route: 'device', label: 'On-device only', note: 'ONLY_ON_DEVICE · fails without Nano' },
@@ -24,18 +19,13 @@ export default function App() {
   const [prompt, setPrompt] = useState('In one sentence, what is hybrid AI inference?');
   const [busy, setBusy] = useState<Route | null>(null);
   const [outcomes, setOutcomes] = useState<Partial<Record<Route, Outcome>>>({});
-  const [doc, setDoc] = useState(SAMPLE);
 
   const refreshNano = () => nanoStatus().then(setNano);
+  const nanoReady = Boolean(firebase) && nano === 'available';
   useEffect(() => {
     refreshNano();
   }, []);
 
-  const preview = useMemo(() => {
-    const spans = detectPatterns(doc);
-    const { redacted, vault } = redact(doc, spans);
-    return { spans, redacted, leaks: findLeaks(redacted, vault) };
-  }, [doc]);
 
   async function warmUp() {
     setProgress(0);
@@ -117,18 +107,8 @@ export default function App() {
         </div>
       </section>
 
-      <section className="card">
-        <h2>Redaction preview <span className="badge on_device">🔒 on-device · patterns only</span></h2>
-        <p className="muted">Synthetic data only. Nano-based detection of names and addresses comes next.</p>
-        <div className="split">
-          <textarea value={doc} onChange={(e) => setDoc(e.target.value)} rows={7} aria-label="Original document" />
-          <pre aria-label="What would leave the device">{preview.redacted}</pre>
-        </div>
-        <p className="muted">
-          {preview.spans.length} item(s) redacted ({[...new Set(preview.spans.map((s) => s.type))].join(', ') || 'none'}).
-          Airlock re-scan: {preview.leaks.length === 0 ? <Ok>clear</Ok> : <Bad>{preview.leaks.length} leak(s)</Bad>}
-        </p>
-      </section>
+      <RedactionPanel nanoReady={nanoReady} />
+      <EvalPanel nanoReady={nanoReady} />
     </main>
   );
 }

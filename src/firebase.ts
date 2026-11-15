@@ -36,7 +36,7 @@ function setup(): FirebaseSetup | null {
   let appCheck: AppCheckMode = 'off';
 
   if (env.DEV && debugToken) {
-    (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN =
+    (globalThis as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN =
       debugToken === 'true' ? true : debugToken;
     appCheck = 'debug-token';
   } else if (siteKey) {
