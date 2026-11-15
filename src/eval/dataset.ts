@@ -5,6 +5,8 @@ import type { PiiType } from '../redact/patterns';
  * is invented; card/IBAN numbers are public test values. Never add real data.
  *
  * Each label's `value` must appear verbatim in `text`; every occurrence counts.
+ * Not labelled (public, not personal): government bodies, courts, tax authorities,
+ * job titles and departments. Detecting them counts as a false positive.
  */
 export interface Label {
   type: PiiType;
@@ -197,7 +199,7 @@ Address: 3 Canal Street, Manchester M1 3HE
 You owe £640 for the tax year ending 5 April 2026. Pay by 31 January 2027.
 Payments from account GB82 WEST 1234 5698 7654 32 are accepted.`,
     labels: [
-      L('ORG', 'HM Revenue & Customs'), L('PERSON', 'Ahmed Siddiqui'), L('ID', '84721 93056'),
+      L('PERSON', 'Ahmed Siddiqui'), L('ID', '84721 93056'),
       L('ADDRESS', '3 Canal Street, Manchester M1 3HE'), L('DATE', '5 April 2026'), L('DATE', '31 January 2027'),
       L('IBAN', 'GB82 WEST 1234 5698 7654 32'),
     ],

@@ -96,6 +96,8 @@ const DETECTORS: Detector[] = [
   { type: 'SSN', regex: /\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g },
   { type: 'AADHAAR', regex: /\b[2-9]\d{3}[ -]?\d{4}[ -]?\d{4}\b/g, validate: verhoeffValid },
   { type: 'PAN', regex: /\b[A-Z]{3}[PCHABGJLFT][A-Z]\d{4}[A-Z]\b/g },
+  // Indian TAN (tax deduction account number): 4 letters, 5 digits, 1 letter.
+  { type: 'ID', regex: /\b[A-Z]{4}\d{5}[A-Z]\b/g },
   {
     type: 'PHONE',
     regex: /(?<![\w+])(?:\+\d{1,3}[ .-]?)?(?:\(\d{1,4}\)[ .-]?)?\d{2,5}(?:[ .-]?\d{2,5}){1,3}\b/g,

@@ -26,6 +26,7 @@ describe('detectPatterns', () => {
     expect(types('card 4111-1111-1111-1111 ok')).toEqual(['CARD']);
     expect(types('SSN 123-45-6789')).toEqual(['SSN']);
     expect(types('PAN ABCPE1234F')).toEqual(['PAN']);
+    expect(types('TAN BLRZ04412E')).toEqual(['ID']);
     expect(types('IBAN GB82 WEST 1234 5698 7654 32.')).toEqual(['IBAN']);
   });
 

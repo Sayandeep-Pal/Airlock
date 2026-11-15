@@ -38,15 +38,19 @@ export const ENTITY_SCHEMA = {
 
 export function buildPrompt(chunk: string): string {
   return `You find personal data in documents. List every item of these types in the TEXT:
-- PERSON: names of people (full names, first names, surnames, with or without titles like Dr. or Ms.)
+- PERSON: every person's name: patients, clients, tenants, employees, doctors, lawyers, advocates, witnesses, and people who sign the letter. Include full names, first names and surnames.
 - ADDRESS: street addresses, including house number, street, city and postal code
-- ORG: names of employers, hospitals, clinics, banks, insurers, schools, landlords, law firms and companies
-- ID: account, patient, policy, case, claim, invoice, member, employee, tenant or reference numbers
+- ORG: names of private organisations: employers, hospitals, clinics, banks, insurers, schools, landlords, law firms and companies
+- ID: case, account, patient, policy, claim, invoice, member, employee, tenant, tax (e.g. TAN) or reference numbers. Copy the whole number including letter prefixes, e.g. "OS 1482/2026" or "CFL-LN-0093312".
 
 Rules:
 - Copy each item EXACTLY as written in the TEXT: same spelling, capitals and punctuation.
-- Do not include field labels such as "Name:", "MRN" or "Policy No." in the item.
-- Do not list job titles, medical conditions, medicines, amounts of money, or generic words.
+- Do not include field labels or roles such as "Name:", "MRN", "Policy No.", "Signed:", "Advocate" or "Dr." in the item.
+- Do NOT list:
+  - job titles or roles (e.g. "HR Director", "Senior Manager", "Operations Analyst")
+  - departments or teams (e.g. "Marketing", "People Team")
+  - government bodies, courts and tax authorities (e.g. "Internal Revenue Service", "Income Tax Department"); these are public, not personal
+  - medical conditions, medicines, amounts of money, or generic words
 - If there are none, return an empty list.
 
 TEXT:
