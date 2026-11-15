@@ -67,4 +67,10 @@ describe('redact / restore round trip', () => {
     const leaky = findLeaks('Hi JANE@example.org, card 4111111111111111', vault);
     expect(leaky.map((l) => l.type).sort()).toEqual(['CARD', 'EMAIL', 'EMAIL']);
   });
+
+  it('airlock matches hidden values as whole words only', () => {
+    const { redacted: r, vault: v } = redact('Al paid.', [{ start: 0, end: 2, type: 'PERSON', value: 'Al', source: 'nano' }]);
+    expect(r).toBe('[PERSON_1] paid.');
+    expect(findLeaks('Total: 5. Ask AL or al.', v).map((l) => l.value)).toEqual(['AL', 'al']);
+  });
 });

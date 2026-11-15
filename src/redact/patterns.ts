@@ -17,14 +17,16 @@ export type PiiType =
   | 'PERSON'
   | 'ADDRESS'
   | 'ORG'
-  | 'ID';
+  | 'ID'
+  // Marked by hand by the user in the review step.
+  | 'OTHER';
 
 export interface Span {
   start: number;
   end: number;
   type: PiiType;
   value: string;
-  source: 'pattern' | 'nano';
+  source: 'pattern' | 'nano' | 'manual';
 }
 
 interface Detector {

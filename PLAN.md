@@ -18,12 +18,12 @@
 | Gemini Nano detection (names, addresses, orgs, IDs) | ✅ Done (one prompt tuning round; re-score pending) |
 | Test set (20 synthetic docs) and scoring, in tests and in the browser | ✅ Done |
 | Developer "lab" UI (status, route test, redaction preview, score table) | ✅ Done |
-| **Main Airlock flow:** review → airlock check → cloud answer → restore | ⬜ Not started. **Highest priority** |
-| No-Nano safe mode with consent | ⬜ Partly done: detection falls back and reports the error; no UI or consent yet |
-| Offline quick summary (`PREFER_ON_DEVICE`) | ⬜ Not started |
-| Trust log | ⬜ Not started |
-| Product-quality UI (lab moves to an "Under the hood" tab) | ⬜ Not started |
-| PDF upload, ready-made tasks, "Try a sample" | ⬜ Not started |
+| **Main Airlock flow:** review → airlock check → cloud answer → restore | 🟨 Built and unit-tested; **needs first browser test** |
+| No-Nano safe mode with consent | 🟨 Built (warning banner, consent checkbox, mark-by-hand); needs browser test |
+| Offline quick summary (`PREFER_ON_DEVICE`) | 🟨 Built as the "Quick summary" task; needs offline test |
+| Trust log | 🟨 Built (memory only); needs browser test |
+| Product-quality UI (lab moves to an "Under the hood" tab) | 🟨 Tabs, stepper and flow screens done; visual polish pass still to do |
+| PDF upload, ready-made tasks, "Try a sample" | 🟨 Tasks and samples done; PDF upload not started |
 | Remote Config, date-blurring option | ⬜ Not started (nice to have) |
 | Production deploy (Hosting, reCAPTCHA Enterprise, App Check enforced) | ⬜ Not started |
 | README, architecture diagram, demo video, Devpost write-up | ⬜ Not started |
@@ -96,7 +96,36 @@
 
 ## What's left
 
-### 1. Main Airlock flow (highest priority)
+### 0. Built, waiting on a browser test
+Code lives in [src/flow/](src/flow/):
+- `AirlockFlow.tsx`: the three steps.
+- `logic.ts`: `activeSpans`, `findPhrase`, `outgoingLeaks`, `unknownTokens`, `TrustEntry`.
+- `tasks.ts`: task list and prompt builder.
+- `markdown.ts`: safe Markdown parser; no `innerHTML` anywhere.
+- `TrustLog.tsx`: the trust log.
+- `useNano.ts`: shared Nano status and warm-up.
+
+The lab now lives in [src/components/Lab.tsx](src/components/Lab.tsx). Both tabs stay mounted, so switching tabs loses nothing.
+
+**Decisions:**
+- The airlock check runs on the **full prompt**, not just the document.
+- Items the user deliberately reveals are allowed through. Anything else found blocks sending.
+- Leak matching is whole-word, so a hidden "Al" doesn't block "Total".
+- Nano warms up on the first click or key press in the document box. Chrome requires a user gesture.
+- Only cloud requests are written to the trust log. On-device runs send nothing.
+- The quick summary only ever receives redacted text.
+
+**To check in the browser:**
+- Each sample end to end.
+- Clicking items to reveal or hide them; "Hide" for a phrase.
+- The airlock blocks when it should.
+- Safe mode: Nano flag off, or a non-Chrome browser.
+- Quick summary with Wi-Fi off.
+- Restored answer vs the "what the cloud saw" toggle.
+- Trust log contents.
+- Phone-width layout.
+
+### 1. Main Airlock flow (spec; mostly built, see section 0)
 The product screen, separate from the lab:
 1. **Input:** paste text, or pick a sample.
 2. **Detect:** call `detectPii` with Nano. Show progress, and warm Nano up early so the ~7 second first call isn't felt.

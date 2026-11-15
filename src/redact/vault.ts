@@ -9,6 +9,7 @@ export interface Redaction {
 }
 
 const TOKEN_RE = /\[([A-Z]+)_(\d+)\]/g;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Replace spans with stable tokens. The same type + value always maps to the same
@@ -52,14 +53,14 @@ export function restore(text: string, vault: Vault): string {
  */
 export function findLeaks(outgoing: string, vault: Vault): Span[] {
   const leaks = detectPatterns(outgoing);
-  const lower = outgoing.toLowerCase();
   for (const { type, value } of vault.values()) {
-    const needle = value.trim().toLowerCase();
+    const needle = value.trim();
     if (needle.length < 2) continue;
-    let i = lower.indexOf(needle);
-    while (i !== -1) {
-      leaks.push({ start: i, end: i + needle.length, type, value: outgoing.slice(i, i + needle.length), source: 'pattern' });
-      i = lower.indexOf(needle, i + needle.length);
+    // Whole words only: a hidden name "Al" must not match inside "Total".
+    const pattern = needle.split(/\s+/).map(escapeRe).join('\\s+');
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, 'giu');
+    for (const m of outgoing.matchAll(re)) {
+      leaks.push({ start: m.index!, end: m.index! + m[0].length, type, value: m[0], source: 'pattern' });
     }
   }
   return leaks.sort((a, b) => a.start - b.start);

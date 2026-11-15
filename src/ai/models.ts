@@ -54,6 +54,9 @@ export async function run(route: Route, prompt: string, onDeviceParams?: OnDevic
  * Downloads/initialises Gemini Nano. Must be called from a user gesture (click),
  * otherwise Chrome refuses to start the download.
  */
-export async function warmUpDeviceModel(onProgress?: (fraction: number) => void): Promise<void> {
-  await getModel('device').initializeDeviceModel(onProgress);
+export async function warmUpDeviceModel(
+  onProgress?: (fraction: number) => void,
+  onDeviceParams?: OnDeviceParams,
+): Promise<void> {
+  await getModel('device', onDeviceParams).initializeDeviceModel(onProgress);
 }
