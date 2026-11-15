@@ -112,7 +112,6 @@ mark.pii { border-radius: 4px; padding: 0 2px; }
 mark.pii.pattern { color: var(--pattern); background: var(--pattern-bg); }
 mark.pii.nano { color: var(--nano); background: var(--nano-bg); }
 mark.pii sup { font-size: 0.6rem; font-weight: 700; margin-left: 2px; opacity: 0.8; }
-.highlighted { min-height: 100%; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 8px; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
@@ -164,7 +163,6 @@ button.pii:hover { outline: 2px solid currentColor; }
 .pii.manual { color: var(--manual); background: var(--manual-bg); }
 .pii.revealed { background: transparent; color: var(--muted); text-decoration: line-through; outline: 1px dashed var(--border); }
 .pii sup { font-size: 0.6rem; font-weight: 700; margin-left: 2px; opacity: 0.8; }
-pre.outgoing { min-height: 100%; }
 .airlock { font-size: 0.9rem; font-weight: 600; padding: 8px 10px; border-radius: 8px; margin: 8px 0 0; }
 .airlock.clear { color: var(--device); background: var(--ok-bg); }
 .airlock.blocked { color: var(--bad); background: var(--bad-bg); }
@@ -201,3 +199,7 @@ pre.outgoing { min-height: 100%; }
   .actions { justify-content: stretch; }
   .actions button { flex: 1; }
 }
+
+/* Review columns: the text box grows, the controls under it stay inside the column. */
+.split > div { display: flex; flex-direction: column; min-width: 0; }
+.split > div > pre { flex: 1; }

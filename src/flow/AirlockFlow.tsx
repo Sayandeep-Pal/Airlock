@@ -256,7 +256,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
                 <input type="radio" name="task" value={t.id} checked={taskId === t.id} onChange={() => setTaskId(t.id)} />
                 <strong>{t.label}</strong>
                 <span className="muted">{t.hint}</span>
-                <span className={`badge ${t.route === 'cloud' ? 'in_cloud' : 'on_device'}`}>
+                <span className={`badge ${t.route !== 'cloud' && nano.ready ? 'on_device' : 'in_cloud'}`}>
                   {t.route === 'cloud' ? '☁️ cloud' : nano.ready ? '🔒 on-device' : '☁️ cloud (no Nano)'}
                 </span>
               </label>
@@ -265,8 +265,8 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
 
           {safeMode && (
             <label className="consent">
-              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />I checked the text on the right and I'm OK
-              sending it.
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />I checked "What will leave your device" and
+              I'm OK sending it.
             </label>
           )}
 

@@ -26,7 +26,8 @@ export function redact(text: string, spans: Span[]): Redaction {
   for (const span of [...spans].sort((a, b) => a.start - b.start)) {
     if (span.start < cursor) continue; // defensive: skip overlaps
     const key = `${span.type}\u0000${span.value.trim().toLowerCase()}`;
-    let token = byKey.get(key);
+    let token = byKey.get(key) ?? (span.type === 'PERSON' ? tokenOfFullName(vault, span.value) : undefined);
+    if (token) byKey.set(key, token);
     if (!token) {
       const n = (counters.get(span.type) ?? 0) + 1;
       counters.set(span.type, n);
@@ -39,6 +40,20 @@ export function redact(text: string, spans: Span[]): Redaction {
   }
   out += text.slice(cursor);
   return { redacted: out, vault };
+}
+
+/**
+ * A surname or first name mentioned alone ("Ms. Raman") reuses the token of the
+ * full name seen earlier ("Priya Raman"), so the cloud model knows it's one person.
+ */
+function tokenOfFullName(vault: Vault, part: string): string | undefined {
+  const words = part.trim().toLowerCase().split(/\s+/);
+  for (const [token, entry] of vault) {
+    if (entry.type !== 'PERSON') continue;
+    const full = entry.value.trim().toLowerCase().split(/\s+/);
+    if (full.length > words.length && words.every((w) => full.includes(w))) return token;
+  }
+  return undefined;
 }
 
 /** Put real values back. Unknown tokens (e.g. invented by the model) are left as-is. */

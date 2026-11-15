@@ -5,7 +5,7 @@ import { activeSpans, findPhrase, outgoingLeaks, spanKey, tokensIn, unknownToken
 import { parseInline, parseMarkdown } from './markdown';
 import { buildTaskPrompt, taskById } from './tasks';
 
-const doc = 'Contact jane@example.org or call +91 98765 43210. Ask for Jane at Acme Corp. Jane is nice.';
+const doc = 'Contact jane@example.org or call +91 98765 43210. Ask for Jane at Acme Studio. Jane is nice.';
 
 describe('review step', () => {
   const detected = detectPatterns(doc);
@@ -21,7 +21,7 @@ describe('review step', () => {
   });
 
   it('activeSpans merges manual items and drops revealed ones', () => {
-    const manual = findPhrase(doc, 'Acme Corp');
+    const manual = findPhrase(doc, 'Acme Studio');
     const all = activeSpans(doc, detected, manual, new Set());
     expect(all.map((s) => s.type)).toEqual(['EMAIL', 'PHONE', 'OTHER']);
     const phone = all[1];

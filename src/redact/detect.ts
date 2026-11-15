@@ -1,5 +1,5 @@
 import { mergeSpans } from './merge';
-import { detectWithNano } from './nano';
+import { NANO_TYPES, detectWithNano, locateEntities, type NanoType } from './nano';
 import { detectPatterns, type Span } from './patterns';
 
 export interface Detection {
@@ -8,6 +8,31 @@ export interface Detection {
   usedNano: boolean;
   nanoError?: string;
   ms: number;
+}
+
+const isNanoType = (t: Span['type']): t is NanoType => (NANO_TYPES as readonly string[]).includes(t);
+
+/**
+ * Hide every other occurrence of anything already found. A name caught once
+ * (e.g. "Dr. Arjun Mehta") is also hidden where it appears bare, and person
+ * names also cover their parts ("Mehta" alone). Without this, the airlock
+ * check would find the repeat and block sending.
+ */
+export function propagate(text: string, spans: Span[]): Span[] {
+  const sourceOf = new Map(spans.map((s) => [`${s.type}|${s.value.toLowerCase()}`, s.source]));
+  const entities = spans.filter((s) => isNanoType(s.type)).map((s) => ({ type: s.type as NanoType, text: s.value }));
+  const extra = locateEntities({ text, offset: 0 }, entities).map((s) => ({
+    ...s,
+    source: sourceOf.get(`${s.type}|${s.value.toLowerCase()}`) ?? sourceOf.get(`PERSON|${s.value.toLowerCase()}`) ?? 'nano',
+  }));
+  // Name parts inherit the source of the full name they came from.
+  for (const e of extra) {
+    if (e.type === 'PERSON' && !sourceOf.has(`PERSON|${e.value.toLowerCase()}`)) {
+      const parent = spans.find((s) => s.type === 'PERSON' && s.value.toLowerCase().includes(e.value.toLowerCase()));
+      if (parent) e.source = parent.source;
+    }
+  }
+  return mergeSpans(text, [...spans, ...extra]);
 }
 
 /**
@@ -34,7 +59,7 @@ export async function detectPii(
   }
 
   return {
-    spans: mergeSpans(text, [...patternSpans, ...nanoSpans]),
+    spans: propagate(text, mergeSpans(text, [...patternSpans, ...nanoSpans])),
     usedNano: useNano && !nanoError,
     nanoError,
     ms: Math.round(performance.now() - t0),

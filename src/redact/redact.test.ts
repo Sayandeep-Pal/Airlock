@@ -48,6 +48,53 @@ describe('detectPatterns', () => {
   });
 });
 
+describe('name and reference-code rules', () => {
+  const found = (t: string) => detectPatterns(t).map((s) => `${s.type}:${s.value}`);
+
+  it('finds names after titles, keeping the title out', () => {
+    expect(found('Review with Dr. Arjun Mehta on Monday')).toEqual(['PERSON:Arjun Mehta']);
+    expect(found('From: Advocate Deepa Menon, on behalf of')).toEqual(['PERSON:Deepa Menon']);
+    expect(found("Dear Ms. O'Connor,")).toEqual(["PERSON:O'Connor"]);
+  });
+
+  it('finds names after field labels and greetings', () => {
+    expect(found('Taxpayer: Rebecca Lyons\nSSN')).toEqual(['PERSON:Rebecca Lyons']);
+    expect(found('Signed: Peter Novak, HR Director')).toEqual(['PERSON:Peter Novak']);
+    expect(found('Owner: Shalini Desai. Tenant: Vikram Joshi.')).toEqual(['PERSON:Shalini Desai', 'PERSON:Vikram Joshi']);
+  });
+
+  it('keeps all-caps field labels and extra spacing out of names', () => {
+    expect(found('Patient: Priya Raman   DOB: 14/02/1988')).toEqual(['PERSON:Priya Raman', 'DATE:14/02/1988']);
+  });
+
+  it('finds names in dash signatures', () => {
+    expect(found('Thanks.\n— Sarah Kim, People Team')).toEqual(['PERSON:Sarah Kim']);
+  });
+
+  it('finds organisations by their company-type ending', () => {
+    expect(found('versus Brightline Builders Pvt Ltd ... Defendant')).toEqual(['ORG:Brightline Builders Pvt Ltd']);
+    expect(found('outside Greenway Pharmacy.')).toEqual(['ORG:Greenway Pharmacy']);
+    expect(found('Dr. Helen Park, Riverside Family Practice')).toEqual(['PERSON:Helen Park', 'ORG:Riverside Family Practice']);
+    expect(found('Hartwell & Lowe LLP')).toEqual(['ORG:Hartwell & Lowe LLP']);
+    expect(found('LAKESIDE MULTISPECIALITY CLINIC\nDischarge summary')).toEqual(['ORG:LAKESIDE MULTISPECIALITY CLINIC']);
+  });
+
+  it('does not tag public bodies as organisations', () => {
+    expect(found('Internal Revenue Service, HM Revenue & Customs, Income Tax Department')).toEqual([]);
+  });
+
+  it('does not treat roles or generic phrases as names', () => {
+    expect(found('To: The Manager')).toEqual([]);
+    expect(found('Dear Customer Service,')).toEqual([]);
+    expect(found('the doctor said to rest')).toEqual([]);
+  });
+
+  it('finds reference codes but not plain numbers or year ranges', () => {
+    expect(found('Loan CFL-LN-0093312 and sample SD/2026/88213')).toEqual(['ID:CFL-LN-0093312', 'ID:SD/2026/88213']);
+    expect(found('Assessment Year: 2026-27, flat B-14')).toEqual([]);
+  });
+});
+
 describe('redact / restore round trip', () => {
   const text = 'Jane (jane@example.org) emailed bob@example.org. Reply to jane@example.org.';
   const spans = detectPatterns(text);
@@ -66,6 +113,18 @@ describe('redact / restore round trip', () => {
     expect(findLeaks(redacted, vault)).toEqual([]);
     const leaky = findLeaks('Hi JANE@example.org, card 4111111111111111', vault);
     expect(leaky.map((l) => l.type).sort()).toEqual(['CARD', 'EMAIL', 'EMAIL']);
+  });
+
+  it('gives a surname mentioned alone the same token as the full name', () => {
+    const t = 'Patient Priya Raman. Ms. Raman was seen. Dr. Arjun Mehta.';
+    const spans = [
+      { start: 8, end: 19, type: 'PERSON' as const, value: 'Priya Raman', source: 'nano' as const },
+      { start: 25, end: 30, type: 'PERSON' as const, value: 'Raman', source: 'nano' as const },
+      { start: 45, end: 56, type: 'PERSON' as const, value: 'Arjun Mehta', source: 'pattern' as const },
+    ];
+    const { redacted: r, vault: v } = redact(t, spans);
+    expect(r).toBe('Patient [PERSON_1]. Ms. [PERSON_1] was seen. Dr. [PERSON_2].');
+    expect(restore('Ms. [PERSON_1] should call Dr. [PERSON_2].', v)).toBe('Ms. Priya Raman should call Dr. Arjun Mehta.');
   });
 
   it('airlock matches hidden values as whole words only', () => {

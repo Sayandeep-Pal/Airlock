@@ -94,6 +94,16 @@ describe('detectPii', () => {
     const d = await detectPii(text, { useNano: true, prompt: async () => { throw new Error('no nano'); } });
     expect(d.usedNano).toBe(false);
     expect(d.nanoError).toBe('no nano');
-    expect(d.spans.map((s) => s.type)).toEqual(['EMAIL']);
+    // Pattern rules alone still catch the labelled name and the reference code.
+    expect(d.spans.map((s) => `${s.type}:${s.value}`)).toEqual(['PERSON:Priya Raman', 'EMAIL:priya@example.org', 'ORG:Lakeside Clinic', 'ID:LKC-448291']);
+  });
+});
+
+describe('propagate', () => {
+  it('hides bare repeats and surname-only mentions of a name found once', async () => {
+    const text = 'Seen by Dr. Arjun Mehta. Arjun Mehta will call. Ask Mehta.';
+    const d = await detectPii(text, { useNano: false, prompt: async () => '' });
+    expect(d.spans.map((s) => s.value)).toEqual(['Arjun Mehta', 'Arjun Mehta', 'Mehta']);
+    expect(d.spans.every((s) => s.source === 'pattern')).toBe(true);
   });
 });

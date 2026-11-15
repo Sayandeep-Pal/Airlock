@@ -15,13 +15,13 @@
 |---|---|
 | Project setup, Firebase, App Check, hybrid model routing | ✅ Done |
 | Pattern-based detection (emails, cards, IDs, phones, dates…) | ✅ Done |
-| Gemini Nano detection (names, addresses, orgs, IDs) | ✅ Done (one prompt tuning round; re-score pending) |
+| Detection: patterns + Gemini Nano + deterministic backstops | ✅ Done: 99–100% recall, ~97% precision with Nano; 82.7% / 100% without |
 | Test set (20 synthetic docs) and scoring, in tests and in the browser | ✅ Done |
 | Developer "lab" UI (status, route test, redaction preview, score table) | ✅ Done |
-| **Main Airlock flow:** review → airlock check → cloud answer → restore | 🟨 Built and unit-tested; **needs first browser test** |
-| No-Nano safe mode with consent | 🟨 Built (warning banner, consent checkbox, mark-by-hand); needs browser test |
-| Offline quick summary (`PREFER_ON_DEVICE`) | 🟨 Built as the "Quick summary" task; needs offline test |
-| Trust log | 🟨 Built (memory only); needs browser test |
+| **Main Airlock flow:** review → airlock check → cloud answer → restore | ✅ Done; browser-tested (38/38 e2e checks with real Nano, cloud mocked) |
+| No-Nano safe mode with consent | ✅ Done; browser-tested |
+| Offline quick summary (`PREFER_ON_DEVICE`) | ✅ Done; tested offline with real Nano |
+| Trust log | ✅ Done; verified it matches exactly what was sent |
 | Product-quality UI (lab moves to an "Under the hood" tab) | 🟨 Tabs, stepper and flow screens done; visual polish pass still to do |
 | PDF upload, ready-made tasks, "Try a sample" | 🟨 Tasks and samples done; PDF upload not started |
 | Remote Config, date-blurring option | ⬜ Not started (nice to have) |
@@ -85,7 +85,9 @@
 |---|---|---|---|
 | Patterns only (after TAN rule) | 36.1% | 100% | Misses every PERSON, ORG and ADDRESS |
 | Patterns + Nano, run 1 (before tuning) | 97.0% | 96.9% | Missed: Deepa Menon, Peter Novak, "OS 1482/2026", TAN. Extras: job titles, "Marketing", IRS |
-| Patterns + Nano, after tuning | *pending* | *pending* | Run twice. Check the old misses are fixed and nothing regressed. If it regressed, trim the prompt |
+| Patterns + Nano, after prompt tuning (Claude's test browser) | 97.0% / 97.7% | 98.4% | 2 runs. Prompt fixes held, but Nano still varies: names and orgs missed in some runs |
+| Patterns only, with name/code/org rules | **82.7%** | **100%** | Title, label, signature and reference-code rules, the org-ending rule (incl. ALL-CAPS), and `propagate()` |
+| Patterns + Nano, with the rules above | **100.0% / 99.2%** | 97.0% / 97.7% | 2 runs. Only extras: IRS, HM Revenue & Customs, "CP2000", "2025" (public bodies and a notice code) |
 
 ### Observed behaviour
 - Nano's first call takes about 7 seconds while the model loads; later calls take about 2 seconds. A full Nano scoring run takes about 94 seconds for 20 docs.
@@ -96,7 +98,34 @@
 
 ## What's left
 
-### 0. Built, waiting on a browser test
+### 0. Main flow: built and browser-tested ✅
+**Browser testing setup** (the e2e scripts live outside the repo, in the session scratchpad):
+- Real Chrome 157 on an **isolated test profile**. Never the user's profile.
+- That profile holds a copy of the Nano model (`OptGuideOnDeviceModel`) and only the Nano-related `Local State` keys: `browser.enabled_labs_experiments`, `optimization_guide.on_device`, `optimization_guide.model_execution.manifest_asset_ledger`, and the `updateclientdata.apps.fklghjjljmnfjoepjmlobpekiapffcja` component entry.
+- Chrome is launched manually with `--user-data-dir` and `--remote-debugging-port`, and Playwright attaches over CDP.
+  - **Don't use** `launchPersistentContext`: its default flags stop the on-device service from starting.
+  - **Never use** `ignoreDefaultArgs: true`: it drops `--user-data-dir`, and Chrome hands off to the user's running browser.
+- Cloud calls are intercepted with `ctx.route('**/firebasevertexai.googleapis.com/**')`. The test browser's App Check debug token isn't registered, so this lets the test inspect exactly what would be sent.
+- Nano in the test profile is much slower than in the user's normal Chrome: about 20+ seconds per document vs about 5 seconds. Use the user's runs for timing claims.
+- Don't edit `src/` while a browser test runs: Vite hot-reloads the page and breaks the run.
+
+**First browser run: 32 of 36 checks passed.** Found and fixed:
+- **Layout bug:** the review text box had `min-height: 100%`, which pushed the "Hide" form out of its column, under the task cards, so it couldn't be clicked. Fixed with flex columns.
+- **Nano misses vary between runs:** Arjun Mehta, Deepa Menon, Rebecca Lyons and CFL-LN-0093312 leaked in one run.
+  - **Fix:** deterministic backstops in `patterns.ts`. Names after titles (Dr./Ms./Advocate…), names after field labels or greetings (Taxpayer:, Signed:, Dear…), and reference codes (letters and digits joined by `-` or `/`, with 4+ digits).
+  - Plus `propagate()` in `detect.ts`: anything found once is hidden at every other occurrence, including surname-only mentions.
+  - Pattern-only recall went from 36.1% to 68.4%, with 100% precision.
+
+**Final state:** 38 of 38 e2e checks pass. One run crashed at start-up, waiting for the Nano status check, and didn't recur; treat it as a flaky start-up and simply retry.
+- Also fixed after visual review: the consent text said "on the right", which is wrong on phones; the Quick summary badge was green, meaning on-device, even when it would use the cloud; and a surname alone ("Ms. Raman") now reuses the full name's placeholder, so the cloud sees one person, not two (`tokenOfFullName` in `vault.ts`).
+- **Not yet tested for real:** the cloud answers themselves. Their quality, the latency, and how well the model keeps placeholders all need the user's browser, whose App Check debug token is registered, or a debug token registered for the test profile.
+
+**Second round:** 36 of 36, then 34 of 36. Found and fixed:
+- **The name rule captured all-caps labels:** "Priya Raman   DOB". Now name words need a lowercase letter and single spaces between them.
+- **The label rule used the `i` flag with `u`:** this makes `\p{Lu}` and `\p{Ll}` match both cases, which silently disabled the capitalisation checks. Removed. **Never combine `i` with case-sensitive `\p{…}` classes.**
+- **Nano sometimes misses organisations:** added an org rule for capitalised words plus a company ending (Ltd, LLP, Inc, Pvt Ltd, Clinic, Hospital, Pharmacy, Bank…), including ALL-CAPS letterheads. Dash signatures ("— Sarah Kim") count as name labels.
+- **Lesson:** never rely on Nano alone for an item type. Nano's misses change from run to run, so every type needs a deterministic backstop where one is possible. Addresses currently rely on Nano only (12/12 in every run so far).
+
 Code lives in [src/flow/](src/flow/):
 - `AirlockFlow.tsx`: the three steps.
 - `logic.ts`: `activeSpans`, `findPhrase`, `outgoingLeaks`, `unknownTokens`, `TrustEntry`.

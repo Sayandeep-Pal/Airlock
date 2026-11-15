@@ -33,6 +33,8 @@ interface Detector {
   type: PiiType;
   regex: RegExp;
   validate?: (match: string) => boolean;
+  /** Capture group holding the PII; the regex must then use the `d` flag. */
+  group?: number;
 }
 
 const digitsOf = (s: string) => s.replace(/\D/g, '');
@@ -90,6 +92,30 @@ export function verhoeffValid(num: string): boolean {
 const MONTHS =
   'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?';
 
+// Name rules. A name word is capitalised and has a lowercase letter: "O'Connor", "McKay" are
+// fine; "the" and all-caps labels like "DOB" are not. Words are separated by a single space.
+const NAME_WORD = String.raw`\p{Lu}[\p{L}'’-]*\p{Ll}[\p{L}'’-]*`;
+const ORG_WORD = String.raw`(?:\p{Lu}[\p{L}'’.-]*|&)`;
+const ORG_SUFFIX = [
+  'Pvt\\.? Ltd\\.?', 'Private Limited', 'Ltd\\.?', 'Limited', 'LLP', 'LLC', 'Inc\\.?', 'Corp\\.?', 'Corporation', 'PLC', 'GmbH',
+  'Group', 'Practice', 'Pharmacy', 'Clinic', 'Hospital', 'Diagnostics', 'Laboratories', 'Labs', 'Bank', 'Insurance',
+  'Mutual', 'Builders', 'Developers', 'Logistics', 'Analytics', 'Softech', 'Technologies', 'Solutions', 'Management',
+  'Finance', 'Homes', 'Realty', 'Properties',
+]
+  // Letterheads are often all caps ("LAKESIDE MULTISPECIALITY CLINIC").
+  .flatMap((s) => [s, s.toUpperCase()])
+  .join('|');
+const TITLES = 'Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Shri|Smt|Advocate|Adv';
+const NAME_LABELS = [
+  'Patient(?: name)?', 'Name', 'Full name', 'Taxpayer', 'Employee', 'Tenant', 'To tenant', 'Owner', 'Complainant',
+  'Against', 'Witness(?:es)?', 'Policy ?holder', 'Insured', 'Claimant', 'Applicant', 'Signed', 'Sincerely', 'Regards',
+  'Best regards', 'Kind regards', 'Dear', 'Hi', 'Hello', 'From', 'To', 'Attn', 'Attention', 'Contact person',
+  // A signature line: "— Sarah Kim, People Team"
+  '[—–-]',
+].join('|');
+/** First words that mean the capitalised phrase is not a person ("To: The Manager"). */
+const NOT_NAMES = new Set(['the', 'our', 'your', 'this', 'that', 'all', 'sir', 'madam', 'team', 'whom', 'customer', 'hr', 'dept', 'department']);
+
 /** Order matters: earlier detectors win when spans overlap. */
 const DETECTORS: Detector[] = [
   { type: 'EMAIL', regex: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g },
@@ -100,6 +126,34 @@ const DETECTORS: Detector[] = [
   { type: 'PAN', regex: /\b[A-Z]{3}[PCHABGJLFT][A-Z]\d{4}[A-Z]\b/g },
   // Indian TAN (tax deduction account number): 4 letters, 5 digits, 1 letter.
   { type: 'ID', regex: /\b[A-Z]{4}\d{5}[A-Z]\b/g },
+  // Reference codes: letters and digits joined by - or /, with at least 4 digits (LKC-448291, SD/2026/88213).
+  {
+    type: 'ID',
+    regex: /\b[A-Z0-9]+(?:[-/][A-Z0-9]+)+\b/g,
+    validate: (m) => /[A-Z]/.test(m) && digitsOf(m).length >= 4,
+  },
+  // Names after a title: "Dr. Arjun Mehta", "Advocate Deepa Menon", "Ms. Raman".
+  {
+    type: 'PERSON',
+    regex: new RegExp(String.raw`\b(?:${TITLES})\.?\s+(${NAME_WORD}(?:[ \t]${NAME_WORD}){0,2})`, 'gdu'),
+    group: 1,
+  },
+  // Names after a field label or greeting: "Taxpayer: Rebecca Lyons", "Signed: Peter Novak", "Dear Kevin Tran,".
+  {
+    type: 'PERSON',
+    regex: new RegExp(
+      String.raw`(?:^|\n|[.;]\s+)[ \t]*(?:${NAME_LABELS})[ \t]*[:,]?[ \t]+(${NAME_WORD}(?:[ \t]${NAME_WORD}){1,2})`,
+      // No `i` flag: with `u`, it makes \p{Lu}/\p{Ll} match both cases and defeats the capitalisation checks.
+      'gdu',
+    ),
+    group: 1,
+    validate: (m) => !NOT_NAMES.has(m.split(/\s+/)[0].toLowerCase()),
+  },
+  // Organisations: capitalised words ending in a company-type word ("Brightline Builders Pvt Ltd", "Greenway Pharmacy").
+  {
+    type: 'ORG',
+    regex: new RegExp(String.raw`\b(?:${ORG_WORD}[ \t]){1,4}(?:${ORG_SUFFIX})(?!\p{L})`, 'gu'),
+  },
   {
     type: 'PHONE',
     regex: /(?<![\w+])(?:\+\d{1,3}[ .-]?)?(?:\(\d{1,4}\)[ .-]?)?\d{2,5}(?:[ .-]?\d{2,5}){1,3}\b/g,
@@ -129,9 +183,9 @@ export function detectPatterns(text: string): Span[] {
 
   for (const det of DETECTORS) {
     for (const m of text.matchAll(det.regex)) {
-      const value = m[0];
-      const start = m.index!;
-      const end = start + value.length;
+      // With `group`, only that capture group is the PII (the label before it is not).
+      const [start, end] = det.group ? m.indices![det.group]! : [m.index!, m.index! + m[0].length];
+      const value = text.slice(start, end);
       if (det.validate && !det.validate(value)) continue;
       if (overlaps(start, end)) continue;
       accepted.push({ start, end, type: det.type, value, source: 'pattern' });
