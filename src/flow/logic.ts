@@ -34,8 +34,11 @@ export function activeSpans(text: string, detected: Span[], manual: Span[], reve
  * allowed through; anything else the re-scan finds blocks sending.
  */
 export function outgoingLeaks(outgoing: string, vault: Vault, revealedValues: string[]): Span[] {
-  const allowed = new Set(revealedValues.map((v) => v.trim().toLowerCase()));
-  return findLeaks(outgoing, vault).filter((l) => !allowed.has(l.value.trim().toLowerCase()));
+  // Where the revealed items sit in the outgoing text. A hidden surname inside a full
+  // name the user chose to reveal ("Daniel Okafor") is part of that choice, not a leak;
+  // the same surname anywhere else still blocks.
+  const allowedRanges = revealedValues.flatMap((v) => findPhrase(outgoing, v).map((s) => [s.start, s.end] as const));
+  return findLeaks(outgoing, vault).filter((l) => !allowedRanges.some(([a, b]) => l.start >= a && l.end <= b));
 }
 
 const TOKEN_RE = /\[[A-Z]+_\d+\]/g;

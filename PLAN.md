@@ -22,11 +22,12 @@
 | No-Nano safe mode with consent | ✅ Done; browser-tested |
 | Offline quick summary (`PREFER_ON_DEVICE`) | ✅ Done; tested offline with real Nano |
 | Trust log | ✅ Done; verified it matches exactly what was sent |
-| Product-quality UI (lab moves to an "Under the hood" tab) | 🟨 Tabs, stepper and flow screens done; visual polish pass still to do |
-| PDF upload, ready-made tasks, "Try a sample" | 🟨 Tasks and samples done; PDF upload not started |
-| Remote Config, date-blurring option | ⬜ Not started (nice to have) |
-| Production deploy (Hosting, reCAPTCHA Enterprise, App Check enforced) | ⬜ Not started |
-| README, architecture diagram, demo video, Devpost write-up | ⬜ Not started |
+| Product-quality UI (lab moves to an "Under the hood" tab) | ✅ Done: how-it-works strip, "How to try it" box, footer, favicon, spinners, copy button, inline keyboard-accessible highlights |
+| PDF upload, ready-made tasks, "Try a sample" | ✅ Done: pdf.js on-device, drag-and-drop, bundled synthetic sample PDF; browser-tested |
+| Remote Config, date-blurring option | ✅ Done: `cloud_model` parameter (optional; default from env); "Send dates as month & year" switch |
+| Production deploy (Hosting, reCAPTCHA Enterprise, App Check enforced) | 🟨 Config ready (`firebase.json` with security headers); **needs the user**: `firebase login`, reCAPTCHA key, deploy, enforce |
+| README, architecture diagram, demo video script, Devpost write-up | ✅ Written: [README.md](README.md), [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md), [docs/DEVPOST.md](docs/DEVPOST.md). **User still records the video** |
+| Real cloud answers (quality, latency, placeholder handling) | ⬜ **Needs the user's browser** (its App Check debug token is registered) |
 
 ---
 
@@ -77,7 +78,7 @@
 - [src/eval/score.ts](src/eval/score.ts):
   - **Recall:** a labelled occurrence counts as caught when 90% or more of its characters are covered, whatever type it was given.
   - **Precision:** the share of spans that overlap any label.
-- **Tests:** `npm test` runs 24 tests. They cover checksums, patterns, the vault round trip, chunking, parsing, locating, merging, `detectPii` with a fake Nano, dataset integrity, and a guard that patterns catch 100% of pattern-type items.
+- **Tests:** `npm test` runs 55 tests (run it from PowerShell or cmd; in Git Bash, Vitest 5 fails every suite with "Cannot read properties of undefined (reading 'config')" because the drive letter is spelled `/c/` vs `C:`). They cover checksums, patterns, the vault round trip, chunking, parsing, locating, merging, `detectPii` with a fake Nano, dataset integrity, and a guard that patterns catch 100% of pattern-type items.
 
 ### Results log
 
@@ -88,6 +89,7 @@
 | Patterns + Nano, after prompt tuning (Claude's test browser) | 97.0% / 97.7% | 98.4% | 2 runs. Prompt fixes held, but Nano still varies: names and orgs missed in some runs |
 | Patterns only, with name/code/org rules | **82.7%** | **100%** | Title, label, signature and reference-code rules, the org-ending rule (incl. ALL-CAPS), and `propagate()` |
 | Patterns + Nano, with the rules above | **100.0% / 99.2%** | 97.0% / 97.7% | 2 runs. Only extras: IRS, HM Revenue & Customs, "CP2000", "2025" (public bodies and a notice code) |
+| Patterns + Nano, after sign-off and field-word rules | **100.0%** | 97.7% | 1 run. Patterns-only unchanged at 82.7% / 100% |
 
 ### Observed behaviour
 - Nano's first call takes about 7 seconds while the model loads; later calls take about 2 seconds. A full Nano scoring run takes about 94 seconds for 20 docs.
@@ -126,6 +128,26 @@
 - **Nano sometimes misses organisations:** added an org rule for capitalised words plus a company ending (Ltd, LLP, Inc, Pvt Ltd, Clinic, Hospital, Pharmacy, Bank…), including ALL-CAPS letterheads. Dash signatures ("— Sarah Kim") count as name labels.
 - **Lesson:** never rely on Nano alone for an item type. Nano's misses change from run to run, so every type needs a deterministic backstop where one is possible. Addresses currently rely on Nano only (12/12 in every run so far).
 
+**Third round (PDF, date blur, polish): 53 of 53 e2e checks pass.** The e2e now also covers:
+- the sample-PDF button
+- the file picker, including the error for an unsupported type
+- PDF detection with no leaks
+- revealing a full name
+- blurring and unblurring dates
+- copying the answer
+- keyboard toggling of highlights
+- highlights rendering inline
+
+Found and fixed:
+- **A name on the line after "Sincerely," leaked.** Added a sign-off rule.
+- **pdf.js collapsed a column gap**, so "Patient: Daniel Okafor Patient ID" was read as a three-word name.
+  - Form-field words (Patient, ID, Date, Address…) now end a name.
+  - `cleanEntity` strips them from Nano names.
+  - `joinTextItems` keeps wide gaps between pdf.js items as 4 spaces.
+- **Clickable highlights were `<button>`s** (inline-block), so a long address rendered as a centred box. They are now `<mark role="button" tabIndex=0>` with Enter and Space handling.
+- **Revealing a full name blocked the airlock** because its hidden surname matched inside it. `outgoingLeaks` now allows a leak only when it sits *inside* an occurrence of a revealed value; the same surname anywhere else still blocks.
+- **The `npm install` on top of a pnpm-made `node_modules`** created a mixed tree. Rebuilt it with `npm ci`; npm is the package manager.
+
 Code lives in [src/flow/](src/flow/):
 - `AirlockFlow.tsx`: the three steps.
 - `logic.ts`: `activeSpans`, `findPhrase`, `outgoingLeaks`, `unknownTokens`, `TrustEntry`.
@@ -154,79 +176,61 @@ The lab now lives in [src/components/Lab.tsx](src/components/Lab.tsx). Both tabs
 - Trust log contents.
 - Phone-width layout.
 
-### 1. Main Airlock flow (spec; mostly built, see section 0)
-The product screen, separate from the lab:
-1. **Input:** paste text, or pick a sample.
-2. **Detect:** call `detectPii` with Nano. Show progress, and warm Nano up early so the ~7 second first call isn't felt.
-3. **Review:** highlight each item (reuse `Highlighted`) and let the user switch it on or off. Switching an item off removes it from the spans. Allow adding a missed item by selecting text.
-4. **Airlock check:** call `findLeaks` on the outgoing text. **The send button is disabled until it's clear.** Show the exact outgoing text, a character count and the token count.
-5. **Cloud task:** call `run('cloud', prompt)`. Tasks:
-   - "Explain in plain language"
-   - "What should I do next?"
-   - "Draft a reply"
-   
-   Prompt rules: keep every `[TYPE_N]` token exactly as written, never guess the real values, and use simple language.
-6. **Restore:** apply `restore` to the answer, then render it as markdown (cloud output uses `**bold**`). Show a toggle between the restored and the tokenised view.
-7. **Badges:** show 🔒/☁️ on every step, from real `where` values.
+### 1. Built since the main flow ✅
+All of these are browser-tested with real Nano; see the third round above.
+- **PDF and text upload:** [src/input/readFile.ts](src/input/readFile.ts).
+  - pdf.js is lazy-loaded into its own chunk; the worker is loaded via Vite's `?url` import.
+  - Limits are 15 MB and 30 pages.
+  - Clear errors for password-protected, scanned or unsupported files.
+- **Sample PDF:** [public/samples/sample-medical-bill.pdf](public/samples/sample-medical-bill.pdf), all made up. It is generated by `node scripts/make-sample-pdf.mjs`. `.gitattributes` marks `*.pdf` as binary so CRLF conversion can't corrupt it.
+- **Date blurring:** [src/redact/dates.ts](src/redact/dates.ts) plus `redact(text, spans, { blurDates })`.
+  - Blurred dates are written straight into the outgoing text and kept out of the vault.
+  - Ambiguous numeric dates such as 03/12/1985 become the year only.
+- **Remote Config:** in [src/firebase.ts](src/firebase.ts).
+  - `cloudModel()` and `configReady` are used by `run()` for cloud-capable routes.
+  - The fetch timeout is 4 s, and failures keep the default.
+  - "Under the hood" shows where the model name came from.
+- **UI polish:**
+  - `HowItWorks` and `TryItBox` in [src/components/HowItWorks.tsx](src/components/HowItWorks.tsx)
+  - footer, favicon, spinners, "Copy answer", disclaimer
+- **Hosting:** security headers in `firebase.json` (`nosniff`, `no-referrer`, `X-Frame-Options DENY`, `Permissions-Policy`), immutable caching for `/assets`, and a JS content type for `.mjs`.
 
-### 2. No-Nano safe mode
-- When Nano is unavailable or `detectPii` returns `usedNano: false`, show a clear warning: "Only pattern rules ran: names and addresses may not be hidden."
-- Require an **explicit consent checkbox** before sending.
-- **Never send raw text silently.**
-- Encourage marking items by hand in this mode.
-- Judges likely lack Nano, so this path must feel polished, not broken.
+### 2. Needs the user (can't be done from Claude's side)
+1. **Real cloud answers.** In the user's own Chrome, whose debug token is registered, run `npm run dev`. Try the hospital sample and the sample PDF with **Explain it**, **What should I do?** and **Draft a reply**. Check:
+   - **answer quality**
+   - **latency:** one early call took 178 s; if it stays slow, check the thinking settings or the model
+   - **that placeholders are kept:** watch for the "invented placeholder" warning
+   - **Then:** capture an answer screenshot as `docs/screenshots/3-answer.png` and add it to the README table.
+2. **Production deploy:**
+   1. `npx firebase login`, then `npx firebase use --add` and pick the project.
+   2. Create a **reCAPTCHA Enterprise** key with the domains `localhost`, `<id>.web.app` and `<id>.firebaseapp.com`.
+   3. Register it in App Check for the web app.
+   4. Put the site key in `.env.local` as `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`. Production builds ignore the debug token: `env.DEV` is false.
+   5. `npm run deploy`, then test the live URL in a normal and a no-Nano browser.
+   6. **Enforce** App Check for AI Logic in the console.
+   7. Put the live link in the README ("Live demo") and in `docs/DEVPOST.md`.
+3. **Optional:** in Remote Config, add a string parameter `cloud_model` and publish it.
+4. **Confirm the cloud model ID** against the Firebase AI Logic models page. `gemini-3.8-flash` works, but came from conflicting docs.
+5. **Delete the stray `pnpm-lock.yaml` and `pnpm-workspace.yaml`.** They are untracked. npm is the package manager, with `package-lock.json` and a clean `npm ci`. Claude's attempt to delete them was blocked by the permission check.
+6. **Record the demo video** following [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Upload it to YouTube as public, 3 minutes or less, and add the link.
+7. **Submit on Devpost** using [docs/DEVPOST.md](docs/DEVPOST.md). Fill in its `TODO` items.
+8. **`git push`** to `Sayandeep-Pal/Airlock`.
 
-### 3. Offline quick summary
-- A "Quick summary" button using `run('prefer-device', …)`. It works offline when Nano is present and uses the cloud when Nano is missing.
-- **Privacy rule:** only ever pass it the **redacted** text, or keep it on-device only when the text isn't redacted.
-- Show the real `where` badge.
+### 3. Optional improvements if time allows
+- **Cloud prompt tuning** after seeing real answers, for example how dates and amounts are referred to.
+- **More samples** for other countries' ID formats.
+- **Persist a "remember my choice" for date blurring** in `localStorage`. Keep it a per-browser convenience only.
+- **A Chrome extension version** (stretch).
 
-### 4. Trust log
-- A list of every request that left the device: time, task, character count, token count, and the exact text sent.
-- **Memory only.** Nothing is stored or uploaded. Cleared on reload.
+### Testing notes
+- **Unit tests:** `npm test` from PowerShell or cmd; 55 tests.
+- **Browser e2e:** the scripts live in the session scratchpad, not the repo: `scripts/e2e.cjs` (53 checks) and `scripts/score.cjs` (in-app Nano scoring).
+  - Start Vite on port 5199 first: `npx vite --port 5199 --strictPort`.
+  - Stop any leftover Vite process on that port.
+  - If the scratchpad is gone, recreate them as described in section 0.
 
-### 5. Product UI and design
-- Main screen: the Airlock flow. A second tab, "Under the hood": the current lab (status, route test, score table).
-- Visual polish:
-  - a clear step indicator (Detect → Review → Send → Answer)
-  - the trust meter
-  - good empty and loading states
-  - works at phone width
-  - light and dark themes, which already exist
-- A short "How to try it" box for judges: enable the Chrome flag, or use safe mode.
-
-### 6. Inputs and tasks
-- **PDF upload:** extract text locally with pdf.js. **Never upload the file.**
-- **"Try a sample" button:** synthetic documents from the dataset.
-- **Ready-made tasks** by document kind (medical, legal, tax, HR, housing, insurance).
-
-### 7. Nice to have
-- Remote Config for the cloud model name and which types to detect.
-- A "blur dates" option that turns dates into month and year, against indirect identification.
-- A Chrome extension version (stretch).
-
-### 8. Release
-- **Production App Check:** reCAPTCHA Enterprise key with domains `localhost`, `<id>.web.app` and `<id>.firebaseapp.com`. Enforce App Check for AI Logic in the console.
-- **Deploy:** `firebase login`, `firebase use <project>`, then `npm run deploy`.
-- **Confirm the cloud model ID.** `gemini-3.8-flash` in `.env.local` is a placeholder from conflicting docs, though it works.
-- **Clean up package managers:** stray `pnpm-lock.yaml` and `pnpm-workspace.yaml` exist and are uncommitted. Ask the user to choose npm or pnpm, then remove the other lockfile.
-
-### 9. Submission materials
-- **README:** pitch, GIF of the flow, architecture diagram, routing table, detection scores, setup steps, how judges can try it without Nano, known limitations (indirect identifiers, Nano variance).
-- **Architecture diagram:** device side (patterns, Nano, vault, airlock check, restore) and cloud side (Gemini via AI Logic), with App Check on the boundary.
-- **Demo video:** 3 minutes or less, captioned, outline below.
-- **Devpost write-up:** Inspiration, What it does, How we built it, Challenges, Accomplishments, What we learned, What's next. Map it to the four judging criteria. Include a cover image and 4–5 screenshots.
-- Write the video script and the write-up **after** the flow is built, so they describe what really exists.
-
----
-
-## Demo video outline (3 minutes or less)
-1. **0:00–0:15. Problem:** "I wanted AI to explain my medical bill, but I'd be uploading my identity."
-2. **0:15–0:30. One-line pitch** on the Airlock home screen.
-3. **0:30–1:30. Main demo:** highlights with 🔒 badges, then the DevTools Network tab showing only tokens leave, then the answer with real names restored.
-4. **1:30–2:00. Hybrid:** Wi-Fi off and the quick summary still works; a no-Nano browser shows the safe mode with consent.
-5. **2:00–2:30. Proof:** the architecture diagram, and the score table (36% → 97%).
-6. **2:30–3:00. Impact:** patients, tenants, employees. Closing line.
+## Demo video
+See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md): 2:50, with timestamps, narration and a shot checklist.
 
 ## Risks
 
@@ -234,18 +238,18 @@ The product screen, separate from the lab:
 |---|---|
 | Nano misses items | Pattern backstop, user review step, eval-driven prompt tuning |
 | Nano's first-load delay | Warm up early, show progress, record the demo on a warmed-up machine |
-| Judges lack Nano | A polished safe mode, a "Try a sample" button, clear instructions in the README and on the page |
+| Judges lack Nano | A polished safe mode, samples and a sample PDF, a "How to try it" box on the page, instructions in the README |
 | Indirect identifiers | Document as a limitation; offer date blurring |
 | Prompt tuning regresses other cases | Re-run the full score after every prompt change; log results in the table above |
 | Real personal data in the repo or demo | Synthetic data only; `.env.local` git-ignored; `.env.example` stays blank |
 
 ## Submission checklist
-- [ ] Public GitHub repo with an Apache-2.0 license (repo exists: `Sayandeep-Pal/Airlock`; push regularly)
+- [ ] Public GitHub repo with an Apache-2.0 license (repo exists: `Sayandeep-Pal/Airlock`; local commits not pushed yet)
 - [x] Real AI calls through Firebase AI Logic
-- [ ] Setup and run instructions final in the README
+- [x] Setup and run instructions final in the README (add the live link after deploy)
 - [x] App Check integrated (debug token in dev)
 - [ ] App Check in production mode and enforced
-- [ ] English UI and English project description, including the hybrid design
+- [x] English UI and English project description, including the hybrid design ([docs/DEVPOST.md](docs/DEVPOST.md))
 - [ ] Public YouTube demo, 3 minutes or less
 - [ ] Live deployed link
 - [x] No secrets or real personal data in the code or demo so far

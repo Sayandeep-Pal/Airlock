@@ -37,6 +37,17 @@ describe('review step', () => {
     expect(outgoingLeaks(redacted, vault, [phone.value])).toEqual([]);
     expect(outgoingLeaks(redacted, vault, []).map((l) => l.type)).toEqual(['PHONE']);
   });
+
+  it('a hidden surname inside a revealed full name is allowed, but not elsewhere', () => {
+    const text = 'Patient: Daniel Okafor. Dear Mr. Okafor,';
+    const hiddenSurname = { start: 33, end: 39, type: 'PERSON' as const, value: 'Okafor', source: 'nano' as const };
+    // The user revealed the full name "Daniel Okafor", so only the later surname is hidden.
+    const { redacted: outgoing, vault: v } = redact(text, [hiddenSurname]);
+    expect(outgoing).toBe('Patient: Daniel Okafor. Dear Mr. [PERSON_1],');
+    expect(outgoingLeaks(outgoing, v, []).map((l) => l.value)).toEqual(['Daniel Okafor', 'Okafor']);
+    expect(outgoingLeaks(outgoing, v, ['Daniel Okafor'])).toEqual([]);
+    expect(outgoingLeaks(outgoing + ' Okafor called.', v, ['Daniel Okafor']).map((l) => l.value)).toEqual(['Okafor']);
+  });
 });
 
 describe('answer step', () => {
