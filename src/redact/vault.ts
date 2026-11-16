@@ -1,3 +1,4 @@
+import { blurDate } from './dates';
 import { detectPatterns, type PiiType, type Span } from './patterns';
 
 /** Maps tokens like "[PERSON_1]" to the real value. Never leaves the device. */
@@ -16,7 +17,12 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * token, so the cloud model can still reason about "[PERSON_1] paid [PERSON_2]".
  * Spans must be non-overlapping.
  */
-export function redact(text: string, spans: Span[]): Redaction {
+export interface RedactOptions {
+  /** Send dates as month + year ("March 2026") instead of a placeholder. */
+  blurDates?: boolean;
+}
+
+export function redact(text: string, spans: Span[], options: RedactOptions = {}): Redaction {
   const vault: Vault = new Map();
   const byKey = new Map<string, string>();
   const counters = new Map<PiiType, number>();
@@ -25,6 +31,12 @@ export function redact(text: string, spans: Span[]): Redaction {
   let cursor = 0;
   for (const span of [...spans].sort((a, b) => a.start - b.start)) {
     if (span.start < cursor) continue; // defensive: skip overlaps
+    const blurred = options.blurDates && span.type === 'DATE' ? blurDate(span.value) : undefined;
+    if (blurred) {
+      out += text.slice(cursor, span.start) + blurred;
+      cursor = span.end;
+      continue;
+    }
     const key = `${span.type}\u0000${span.value.trim().toLowerCase()}`;
     let token = byKey.get(key) ?? (span.type === 'PERSON' ? tokenOfFullName(vault, span.value) : undefined);
     if (token) byKey.set(key, token);

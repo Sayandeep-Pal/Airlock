@@ -121,21 +121,48 @@ export function locateEntities(chunk: Chunk, entities: Entity[]): Span[] {
   };
 
   for (const e of entities) {
-    const text = e.text.trim().replace(/[\s,.;:]+$/, '');
-    if (text.length < 2 || !/[\p{L}\p{N}]/u.test(text)) continue;
-    add(e.type, text, 'giu');
-
-    if (e.type === 'PERSON') {
-      const parts = text.replace(TITLE, '').split(/\s+/);
-      if (parts.length > 1) {
-        for (const p of parts) {
-          // Case-sensitive and capitalised only, so "Rose" the name doesn't hit "rose" the verb.
-          if (p.length >= 3 && /^\p{Lu}/u.test(p)) add('PERSON', p, 'gu');
-        }
-      }
+    for (const text of cleanEntity(e)) {
+      add(e.type, text, 'giu');
+      if (e.type === 'PERSON') addNameParts(text);
     }
   }
   return spans;
+
+  function addNameParts(text: string) {
+    const parts = text.replace(TITLE, '').split(/\s+/);
+    if (parts.length < 2) return;
+    for (const p of parts) {
+      // Case-sensitive and capitalised only, so "Rose" the name doesn't hit "rose" the verb.
+      if (p.length >= 3 && /^\p{Lu}/u.test(p)) add('PERSON', p, 'gu');
+    }
+  }
+}
+
+/** Form-field words Nano sometimes glues onto a name ("Daniel Okafor    Patient ID"). */
+const FIELD_WORDS = new Set([
+  'patient', 'name', 'id', 'dob', 'date', 'birth', 'address', 'phone', 'tel', 'mobile', 'email', 'ref', 'reference',
+  'no', 'number', 'policy', 'account', 'signed', 'from', 'to', 'attn',
+]);
+
+/**
+ * Tidies one Nano entity into the text pieces worth hiding. A run of 2+ spaces or a tab
+ * is a table column break, so it splits the entity; for names, field words at either
+ * end are dropped, and a "name" made only of field words is ignored.
+ */
+export function cleanEntity(e: Entity): string[] {
+  const pieces = e.type === 'PERSON' ? e.text.split(/[ \t]{2,}|\t|\n/) : [e.text];
+  const out: string[] = [];
+  for (const raw of pieces) {
+    let text = raw.trim().replace(/[\s,.;:]+$/, '').replace(/^[\s,.;:]+/, '');
+    if (e.type === 'PERSON') {
+      const words = text.split(/\s+/);
+      while (words.length && FIELD_WORDS.has(words[0]!.toLowerCase().replace(/[.:]$/, ''))) words.shift();
+      while (words.length && FIELD_WORDS.has(words[words.length - 1]!.toLowerCase().replace(/[.:]$/, ''))) words.pop();
+      text = words.join(' ');
+    }
+    if (text.length >= 2 && /[\p{L}\p{N}]/u.test(text)) out.push(text);
+  }
+  return out;
 }
 
 /** One Nano call per chunk. `prompt` is injected so this stays testable. */

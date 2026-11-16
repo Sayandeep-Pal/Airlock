@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { run, type Where } from '../ai/models';
 import { promptNanoForJson } from '../ai/nanoPrompt';
 import { Highlighted } from '../components/Highlighted';
+import { HowItWorks, TryItBox } from '../components/HowItWorks';
 import { Markdown } from '../components/Markdown';
 import { DATASET } from '../eval/dataset';
 import { firebase } from '../firebase';
+import { ACCEPT, FileReadError, readDocumentFile } from '../input/readFile';
 import { detectPii, type Detection } from '../redact/detect';
 import { mergeSpans } from '../redact/merge';
 import type { Span } from '../redact/patterns';
@@ -49,15 +51,21 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
   const [consent, setConsent] = useState(false);
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [showTokens, setShowTokens] = useState(false);
-  const [busy, setBusy] = useState<'detect' | 'send' | null>(null);
+  const [busy, setBusy] = useState<'detect' | 'send' | 'read' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<TrustEntry[]>([]);
+  const [blurDates, setBlurDates] = useState(false);
+  const [fileNote, setFileNote] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // ---- Derived state: everything below is computed on the device. ----
   const allSpans = useMemo(() => (detection ? mergeSpans(doc, [...detection.spans, ...manual]) : []), [doc, detection, manual]);
   const spans = useMemo(() => (detection ? activeSpans(doc, detection.spans, manual, revealed) : []), [doc, detection, manual, revealed]);
   const revealedValues = useMemo(() => allSpans.filter((s) => revealed.has(spanKey(s))).map((s) => s.value), [allSpans, revealed]);
-  const { redacted, vault } = useMemo(() => redact(doc, spans), [doc, spans]);
+  const { redacted, vault } = useMemo(() => redact(doc, spans, { blurDates }), [doc, spans, blurDates]);
+  const hasDates = spans.some((s) => s.type === 'DATE');
   const task = taskById(taskId);
   const prompt = useMemo(() => buildTaskPrompt(task, redacted), [task, redacted]);
   // The airlock check runs on the full prompt, i.e. exactly what would be sent.
@@ -71,8 +79,9 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
     return by;
   }, [spans]);
 
-  function reset(nextDoc = '') {
+  function reset(nextDoc = '', note: string | null = null) {
     setDoc(nextDoc);
+    setFileNote(note);
     setDetection(null);
     setManual([]);
     setRevealed(new Set());
@@ -97,6 +106,44 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
       setError((e as Error).message);
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function openFile(file: File | undefined) {
+    if (!file) return;
+    setBusy('read');
+    setError(null);
+    try {
+      const { text, pages, truncated } = await readDocumentFile(file);
+      const where = pages ? `${pages} page${pages === 1 ? '' : 's'} of ` : '';
+      reset(text, `Read ${where}"${file.name}" on your device. The file itself was not uploaded.${truncated ? ' Only the first pages were read.' : ''}`);
+    } catch (e) {
+      setError(e instanceof FileReadError ? e.message : `Couldn't read that file (${(e as Error).message}).`);
+    } finally {
+      setBusy(null);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  }
+
+  /** A made-up bill shipped with the app, so PDF reading can be tried without a file of your own. */
+  async function openSamplePdf() {
+    try {
+      const res = await fetch('/samples/sample-medical-bill.pdf');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await openFile(new File([await res.blob()], 'sample-medical-bill.pdf', { type: 'application/pdf' }));
+    } catch (e) {
+      setError(`Couldn't load the sample PDF (${(e as Error).message}).`);
+    }
+  }
+
+  async function copyAnswer() {
+    if (!answer) return;
+    try {
+      await navigator.clipboard.writeText(restore(answer.text, vault));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Couldn't copy to the clipboard.");
     }
   }
 
@@ -135,6 +182,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
       }
       setAnswer({ task: task.id, text: result.text, where: result.where, ms: result.ms });
       setShowTokens(false);
+      setCopied(false);
       setStage('answer');
     } catch (e) {
       const msg = (e as Error).message;
@@ -166,6 +214,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             A medical report, a legal notice, a tax letter… Airlock finds the personal details <strong>on your device</strong> before
             anything goes to the cloud. Use made-up data while testing.
           </p>
+          <HowItWorks />
           <div className="toolbar">
             <select value="" onChange={(e) => e.target.value && reset(DATASET.find((d) => d.id === e.target.value)!.text)} aria-label="Try a sample">
               <option value="">Try a sample…</option>
@@ -175,24 +224,61 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
                 </option>
               ))}
             </select>
+            <button className="secondary" onClick={() => fileInput.current?.click()} disabled={busy !== null}>
+              {busy === 'read' ? (
+                <>
+                  <Spinner /> Reading…
+                </>
+              ) : (
+                '📄 Open a PDF or text file'
+              )}
+            </button>
+            <button className="link" onClick={openSamplePdf} disabled={busy !== null}>
+              or try a sample PDF
+            </button>
+            <input ref={fileInput} type="file" accept={ACCEPT} hidden onChange={(e) => openFile(e.target.files?.[0])} aria-label="Open a file" />
+            <span className="muted small">Files are read on your device, never uploaded.</span>
           </div>
           <textarea
+            className={dragging ? 'dragging' : undefined}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes('Files')) {
+                e.preventDefault();
+                setDragging(true);
+              }
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              if (e.dataTransfer.files.length) {
+                e.preventDefault();
+                setDragging(false);
+                openFile(e.dataTransfer.files[0]);
+              }
+            }}
             value={doc}
             onChange={(e) => setDoc(e.target.value)}
             // A click or key press counts as a user gesture, which Chrome requires to load Nano.
             onPointerDown={() => nano.ready && !nano.warm && nano.warmUp()}
             onKeyDown={() => nano.ready && !nano.warm && nano.warmUp()}
             rows={12}
-            placeholder="Paste your document here…"
+            placeholder="Paste your document here, or drop a PDF…"
             aria-label="Your document"
           />
+          <p className="muted small meta">{fileNote ?? (doc ? `${doc.length.toLocaleString()} characters` : '')}</p>
           <NanoNotice nano={nano} />
           <div className="actions">
             <button className="primary" onClick={detect} disabled={!doc.trim() || busy !== null}>
-              {busy === 'detect' ? (nano.ready ? 'Gemini Nano is reading on your device…' : 'Scanning…') : 'Find personal details 🔒'}
+              {busy === 'detect' ? (
+                <>
+                  <Spinner /> {nano.ready ? 'Gemini Nano is reading on your device…' : 'Scanning…'}
+                </>
+              ) : (
+                'Find personal details 🔒'
+              )}
             </button>
           </div>
           {error && <p className="error">{error}</p>}
+          <TryItBox nano={nano} />
         </section>
       )}
 
@@ -236,6 +322,12 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             <div>
               <h3>What will leave your device</h3>
               <pre className="outgoing">{redacted}</pre>
+              {hasDates && (
+                <label className="switch">
+                  <input type="checkbox" checked={blurDates} onChange={(e) => setBlurDates(e.target.checked)} />
+                  Send dates as month &amp; year (the AI can reason about timing; exact days stay hidden)
+                </label>
+              )}
               <p className={leaks.length ? 'airlock blocked' : 'airlock clear'} role="status">
                 {leaks.length === 0 ? (
                   <>
@@ -275,7 +367,11 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
               ← Edit document
             </button>
             <button className="primary" onClick={send} disabled={!canSend}>
-              {busy === 'send' ? 'Working…' : task.route === 'cloud' ? 'Send through the airlock ☁️' : 'Summarise 🔒'}
+              {busy === 'send' ? (
+                <>
+                  <Spinner /> {task.route === 'cloud' ? 'Waiting for the cloud…' : 'Working…'}
+                </>
+              ) : task.route === 'cloud' ? 'Send through the airlock ☁️' : 'Summarise 🔒'}
             </button>
           </div>
           {error && <p className="error">{error}</p>}
@@ -295,11 +391,14 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             {answer.where === 'in_cloud' ? 'The cloud only saw placeholders. ' : 'Nothing left your device. '}
             Your real details were put back <strong>on your device</strong>.
           </p>
-          <div className="toolbar">
+          <div className="toolbar spread">
             <label className="switch">
               <input type="checkbox" checked={showTokens} onChange={(e) => setShowTokens(e.target.checked)} />
               Show what the {answer.where === 'in_cloud' ? 'cloud' : 'model'} actually saw
             </label>
+            <button className="secondary" onClick={copyAnswer}>
+              {copied ? '✓ Copied' : 'Copy answer'}
+            </button>
           </div>
           <div className="answer">
             <Markdown text={showTokens ? answer.text : restore(answer.text, vault)} />
@@ -315,6 +414,8 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
               New document
             </button>
           </div>
+          <p className="muted small disclaimer">General information, not legal, medical or financial advice.</p>
+          {error && <p className="error">{error}</p>}
         </section>
       )}
 
@@ -348,4 +449,8 @@ function NanoNotice({ nano }: { nano: NanoState }) {
       sending).
     </p>
   );
+}
+
+function Spinner() {
+  return <span className="spinner" aria-hidden="true" />;
 }

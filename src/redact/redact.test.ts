@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { detectPatterns, ibanValid, luhnValid, verhoeffValid } from './patterns';
+import { blurDate } from './dates';
 import { findLeaks, redact, restore } from './vault';
 
 // All values below are synthetic test numbers, not real people.
@@ -65,6 +66,9 @@ describe('name and reference-code rules', () => {
 
   it('keeps all-caps field labels and extra spacing out of names', () => {
     expect(found('Patient: Priya Raman   DOB: 14/02/1988')).toEqual(['PERSON:Priya Raman', 'DATE:14/02/1988']);
+    // pdf.js can collapse a column gap to one space; the next field label still ends the name.
+    expect(found('Patient: Daniel Okafor Patient ID: NGH-PT-0045127')).toEqual(['PERSON:Daniel Okafor', 'ID:NGH-PT-0045127']);
+    expect(found('Dr. Mei Lin Tan')).toEqual(['PERSON:Mei Lin Tan']);
   });
 
   it('finds names in dash signatures', () => {
@@ -131,5 +135,35 @@ describe('redact / restore round trip', () => {
     const { redacted: r, vault: v } = redact('Al paid.', [{ start: 0, end: 2, type: 'PERSON', value: 'Al', source: 'nano' }]);
     expect(r).toBe('[PERSON_1] paid.');
     expect(findLeaks('Total: 5. Ask AL or al.', v).map((l) => l.value)).toEqual(['AL', 'al']);
+  });
+});
+
+describe('blur dates', () => {
+  it('turns exact dates into month and year, or just the year when ambiguous', () => {
+    expect(blurDate('2026-11-15')).toBe('November 2026');
+    expect(blurDate('14/02/1988')).toBe('February 1988');
+    expect(blurDate('03/12/1985')).toBe('1985');
+    expect(blurDate('12 March 1985')).toBe('March 1985');
+    expect(blurDate('3rd Mar. 2026')).toBe('March 2026');
+    expect(blurDate('March 12, 2026')).toBe('March 2026');
+    expect(blurDate('not a date')).toBeUndefined();
+  });
+
+  it('sends blurred dates instead of placeholders, and the airlock accepts them', () => {
+    const text = 'Patient Priya Raman, DOB 14/02/1988, seen on 2026-11-15.';
+    const spans = detectPatterns(text);
+    const { redacted: r, vault: v } = redact(text, spans, { blurDates: true });
+    expect(r).toBe('Patient [PERSON_1], DOB February 1988, seen on November 2026.');
+    expect([...v.keys()]).toEqual(['[PERSON_1]']);
+    expect(findLeaks(r, v)).toEqual([]);
+    expect(redact(text, spans).redacted).toBe('Patient [PERSON_1], DOB [DATE_1], seen on [DATE_2].');
+  });
+});
+
+describe('sign-off names', () => {
+  it('finds a name on the line after a sign-off', () => {
+    const found = detectPatterns('Please pay soon.\n\nSincerely,\nLaura Brennan\nPatient Accounts').map((s) => `${s.type}:${s.value}`);
+    expect(found).toEqual(['PERSON:Laura Brennan']);
+    expect(detectPatterns('Thanks,\nThe Billing Team')).toEqual([]);
   });
 });

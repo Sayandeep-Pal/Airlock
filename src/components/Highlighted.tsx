@@ -32,16 +32,26 @@ export function Highlighted({
     );
     parts.push(
       onToggle ? (
-        <button
+        // An inline <mark> rather than a <button>: buttons are inline-blocks, so a long
+        // address would turn into a centred box instead of wrapping with the text.
+        <mark
           key={spanKey(s)}
-          type="button"
-          className={`pii ${s.source}${isRevealed ? ' revealed' : ''}`}
+          role="button"
+          tabIndex={0}
+          className={`pii toggle ${s.source}${isRevealed ? ' revealed' : ''}`}
           title={title}
+          aria-label={`${s.type}: ${isRevealed ? 'will be sent, activate to hide' : 'hidden, activate to reveal'}`}
           aria-pressed={!isRevealed}
           onClick={() => onToggle(s)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onToggle(s);
+            }
+          }}
         >
           {content}
-        </button>
+        </mark>
       ) : (
         <mark key={spanKey(s)} className={`pii ${s.source}`} title={title}>
           {content}

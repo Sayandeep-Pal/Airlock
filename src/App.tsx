@@ -13,7 +13,10 @@ export default function App() {
     <main>
       <header className="app-header">
         <div>
-          <h1>Airlock</h1>
+          <h1>
+            <img src="/favicon.svg" alt="" width="32" height="32" className="logo" />
+            Airlock
+          </h1>
           <p className="tagline">Redact on your device. Reason in the cloud. Restore on your device.</p>
         </div>
         <span className={`pill ${nano.ready ? 'on_device' : 'warn'}`} title="Gemini Nano status">
@@ -37,6 +40,16 @@ export default function App() {
       <div hidden={tab !== 'lab'}>
         <Lab nano={nano} />
       </div>
+
+      <footer className="app-footer">
+        <span>No account, no storage: your document and its placeholders live only in this tab.</span>
+        <span>
+          Built with Firebase AI Logic hybrid inference ·{' '}
+          <a href="https://github.com/Sayandeep-Pal/Airlock" target="_blank" rel="noreferrer">
+            Source
+          </a>
+        </span>
+      </footer>
     </main>
   );
 }

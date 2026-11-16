@@ -95,6 +95,10 @@ const MONTHS =
 // Name rules. A name word is capitalised and has a lowercase letter: "O'Connor", "McKay" are
 // fine; "the" and all-caps labels like "DOB" are not. Words are separated by a single space.
 const NAME_WORD = String.raw`\p{Lu}[\p{L}'’-]*\p{Ll}[\p{L}'’-]*`;
+/** Form-field words that end a name: "Patient: Daniel Okafor Patient ID" must not capture "Patient". */
+const FIELD_WORDS = String.raw`(?:Patient|Name|ID|DOB|Date|Address|Phone|Tel|Mobile|Email|E-mail|Policy|Account|Ref|Reference|Statement|Amount|Age|Sex|Gender|Ward|Room|Bed)(?![\p{L}])`;
+/** A second or third word of a name: any name word that is not a field label. */
+const NEXT_NAME_WORD = String.raw`(?!${FIELD_WORDS})${NAME_WORD}`;
 const ORG_WORD = String.raw`(?:\p{Lu}[\p{L}'’.-]*|&)`;
 const ORG_SUFFIX = [
   'Pvt\\.? Ltd\\.?', 'Private Limited', 'Ltd\\.?', 'Limited', 'LLP', 'LLC', 'Inc\\.?', 'Corp\\.?', 'Corporation', 'PLC', 'GmbH',
@@ -112,6 +116,10 @@ const NAME_LABELS = [
   'Best regards', 'Kind regards', 'Dear', 'Hi', 'Hello', 'From', 'To', 'Attn', 'Attention', 'Contact person',
   // A signature line: "— Sarah Kim, People Team"
   '[—–-]',
+].join('|');
+const SIGN_OFFS = [
+  'Sincerely', 'Yours sincerely', 'Yours faithfully', 'Yours truly', 'Regards', 'Best regards', 'Kind regards', 'Warm regards',
+  'With regards', 'Best wishes', 'Best', 'Thanks', 'Thank you', 'Many thanks', 'Cheers', 'Respectfully',
 ].join('|');
 /** First words that mean the capitalised phrase is not a person ("To: The Manager"). */
 const NOT_NAMES = new Set(['the', 'our', 'your', 'this', 'that', 'all', 'sir', 'madam', 'team', 'whom', 'customer', 'hr', 'dept', 'department']);
@@ -135,15 +143,25 @@ const DETECTORS: Detector[] = [
   // Names after a title: "Dr. Arjun Mehta", "Advocate Deepa Menon", "Ms. Raman".
   {
     type: 'PERSON',
-    regex: new RegExp(String.raw`\b(?:${TITLES})\.?\s+(${NAME_WORD}(?:[ \t]${NAME_WORD}){0,2})`, 'gdu'),
+    regex: new RegExp(String.raw`\b(?:${TITLES})\.?\s+(${NAME_WORD}(?:[ \t]${NEXT_NAME_WORD}){0,2})`, 'gdu'),
     group: 1,
   },
   // Names after a field label or greeting: "Taxpayer: Rebecca Lyons", "Signed: Peter Novak", "Dear Kevin Tran,".
   {
     type: 'PERSON',
     regex: new RegExp(
-      String.raw`(?:^|\n|[.;]\s+)[ \t]*(?:${NAME_LABELS})[ \t]*[:,]?[ \t]+(${NAME_WORD}(?:[ \t]${NAME_WORD}){1,2})`,
+      String.raw`(?:^|\n|[.;]\s+)[ \t]*(?:${NAME_LABELS})[ \t]*[:,]?[ \t]+(${NAME_WORD}(?:[ \t]${NEXT_NAME_WORD}){1,2})`,
       // No `i` flag: with `u`, it makes \p{Lu}/\p{Ll} match both cases and defeats the capitalisation checks.
+      'gdu',
+    ),
+    group: 1,
+    validate: (m) => !NOT_NAMES.has(m.split(/\s+/)[0].toLowerCase()),
+  },
+  // Sign-offs with the name on the next line: "Sincerely,\nLaura Brennan".
+  {
+    type: 'PERSON',
+    regex: new RegExp(
+      String.raw`(?:^|\n)[ \t]*(?:${SIGN_OFFS})[ \t]*[,!.]?[ \t]*\r?\n[ \t]*(${NAME_WORD}(?:[ \t]${NEXT_NAME_WORD}){1,2})`,
       'gdu',
     ),
     group: 1,

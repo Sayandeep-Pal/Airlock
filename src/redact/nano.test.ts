@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { detectPii } from './detect';
 import { mergeSpans } from './merge';
-import { chunkText, locateEntities, parseEntities } from './nano';
+import { chunkText, cleanEntity, locateEntities, parseEntities } from './nano';
 import type { Span } from './patterns';
 
 describe('chunkText', () => {
@@ -105,5 +105,20 @@ describe('propagate', () => {
     const d = await detectPii(text, { useNano: false, prompt: async () => '' });
     expect(d.spans.map((s) => s.value)).toEqual(['Arjun Mehta', 'Arjun Mehta', 'Mehta']);
     expect(d.spans.every((s) => s.source === 'pattern')).toBe(true);
+  });
+});
+
+describe('cleanEntity', () => {
+  it('drops form-field words Nano glues onto a name, and splits at column gaps', () => {
+    expect(cleanEntity({ type: 'PERSON', text: 'Daniel Okafor    Patient' })).toEqual(['Daniel Okafor']);
+    expect(cleanEntity({ type: 'PERSON', text: 'Patient: Daniel Okafor Patient ID' })).toEqual(['Daniel Okafor']);
+    expect(cleanEntity({ type: 'PERSON', text: 'Patient' })).toEqual([]);
+    expect(cleanEntity({ type: 'ADDRESS', text: '74 Brookfield Lane,  Apt 5C' })).toEqual(['74 Brookfield Lane,  Apt 5C']);
+  });
+
+  it('never hides the word "Patient" as a name', () => {
+    const text = 'Patient: Daniel Okafor    Patient ID: NGH-PT-0045127';
+    const spans = locateEntities({ text, offset: 0 }, [{ type: 'PERSON', text: 'Daniel Okafor    Patient' }]);
+    expect([...new Set(spans.map((s) => s.value))]).toEqual(['Daniel Okafor', 'Daniel', 'Okafor']);
   });
 });

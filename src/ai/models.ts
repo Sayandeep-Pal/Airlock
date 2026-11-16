@@ -1,5 +1,5 @@
 import { getGenerativeModel, InferenceMode, type GenerativeModel, type OnDeviceParams } from 'firebase/ai';
-import { CLOUD_MODEL, firebase } from '../firebase';
+import { cloudModel, configReady, firebase } from '../firebase';
 
 /**
  * Airlock picks the route explicitly for every call:
@@ -28,12 +28,12 @@ const cache = new Map<string, GenerativeModel>();
 
 export function getModel(route: Route, onDeviceParams?: OnDeviceParams): GenerativeModel {
   if (!firebase) throw new Error('Firebase is not configured. Fill in .env.local (see .env.example).');
-  const key = onDeviceParams ? `${route}:${JSON.stringify(onDeviceParams)}` : route;
+  const key = `${route}:${cloudModel()}:${onDeviceParams ? JSON.stringify(onDeviceParams) : ''}`;
   let model = cache.get(key);
   if (!model) {
     model = getGenerativeModel(firebase.ai, {
       mode: MODE[route],
-      inCloudParams: { model: CLOUD_MODEL },
+      inCloudParams: { model: cloudModel() },
       onDeviceParams,
     });
     cache.set(key, model);
@@ -42,6 +42,8 @@ export function getModel(route: Route, onDeviceParams?: OnDeviceParams): Generat
 }
 
 export async function run(route: Route, prompt: string, onDeviceParams?: OnDeviceParams): Promise<RunResult> {
+  // Cloud-capable routes wait for Remote Config (at most its 4 s timeout, usually instant from cache).
+  if (route !== 'device') await configReady;
   const t0 = performance.now();
   const result = await getModel(route, onDeviceParams).generateContent(prompt);
   const ms = Math.round(performance.now() - t0);

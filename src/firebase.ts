@@ -1,6 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAI, GoogleAIBackend, type AI } from 'firebase/ai';
+import { fetchAndActivate, getRemoteConfig, getValue } from 'firebase/remote-config';
 
 const env = import.meta.env;
 
@@ -11,7 +12,8 @@ const firebaseConfig = {
   appId: env.VITE_FIREBASE_APP_ID,
 };
 
-export const CLOUD_MODEL: string = env.VITE_CLOUD_MODEL || 'gemini-3.8-flash';
+/** Fallback cloud model; Remote Config's `cloud_model` parameter overrides it without a redeploy. */
+export const DEFAULT_CLOUD_MODEL: string = env.VITE_CLOUD_MODEL || 'gemini-3.8-flash';
 
 export type AppCheckMode = 'recaptcha-enterprise' | 'debug-token' | 'off';
 
@@ -53,4 +55,35 @@ function setup(): FirebaseSetup | null {
 
   const ai = getAI(app, { backend: new GoogleAIBackend() });
   return { app, ai, appCheck };
+}
+
+// ---------------- Remote Config ----------------
+// Only the model name comes from Remote Config. Nothing about the user is sent:
+// Remote Config fetches use an anonymous installation ID.
+
+let cloudModelName = DEFAULT_CLOUD_MODEL;
+let cloudModelSource: 'default' | 'remote-config' = 'default';
+
+export const cloudModel = () => cloudModelName;
+export const cloudModelFrom = () => cloudModelSource;
+
+/** Resolves once Remote Config has loaded or failed; failures keep the default. Never rejects. */
+export const configReady: Promise<void> = firebase ? loadRemoteConfig(firebase.app) : Promise.resolve();
+
+async function loadRemoteConfig(app: FirebaseApp): Promise<void> {
+  try {
+    const rc = getRemoteConfig(app);
+    rc.settings.minimumFetchIntervalMillis = env.DEV ? 60_000 : 60 * 60_000;
+    rc.settings.fetchTimeoutMillis = 4_000;
+    rc.defaultConfig = { cloud_model: DEFAULT_CLOUD_MODEL };
+    await fetchAndActivate(rc);
+    const value = getValue(rc, 'cloud_model');
+    const name = value.asString().trim();
+    if (value.getSource() === 'remote' && /^[\w.-]+$/.test(name)) {
+      cloudModelName = name;
+      cloudModelSource = 'remote-config';
+    }
+  } catch {
+    // Offline, blocked or not set up: the default model is used.
+  }
 }
