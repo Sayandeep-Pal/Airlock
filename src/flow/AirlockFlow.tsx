@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { run, type Where } from '../ai/models';
 import { promptNanoForJson } from '../ai/nanoPrompt';
 import { Highlighted } from '../components/Highlighted';
@@ -11,7 +11,7 @@ import { detectPii, type Detection } from '../redact/detect';
 import { mergeSpans } from '../redact/merge';
 import type { Span } from '../redact/patterns';
 import { redact, restore } from '../redact/vault';
-import { activeSpans, findPhrase, outgoingLeaks, spanKey, tokensIn, unknownTokens, type TrustEntry } from './logic';
+import { activeSpans, findPhrase, friendlyCloudError, outgoingLeaks, spanKey, tokensIn, unknownTokens, type TrustEntry } from './logic';
 import { buildTaskPrompt, taskById, TASKS, type TaskId } from './tasks';
 import { TrustLog } from './TrustLog';
 import type { NanoState } from './useNano';
@@ -58,6 +58,15 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
   const [fileNote, setFileNote] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  // Seconds counter while a request is in flight, so a slow answer never looks frozen.
+  useEffect(() => {
+    if (busy !== 'send' && busy !== 'detect') return;
+    setElapsed(0);
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // ---- Derived state: everything below is computed on the device. ----
@@ -186,7 +195,8 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
       setStage('answer');
     } catch (e) {
       const msg = (e as Error).message;
-      setError(navigator.onLine ? msg : `You're offline, so the cloud can't be reached. "Quick summary" works offline on devices with Gemini Nano. (${msg})`);
+      console.warn('Cloud request failed:', msg);
+      setError(friendlyCloudError(msg, navigator.onLine));
     } finally {
       setBusy(null);
     }
@@ -270,7 +280,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             <button className="primary" onClick={detect} disabled={!doc.trim() || busy !== null}>
               {busy === 'detect' ? (
                 <>
-                  <Spinner /> {nano.ready ? 'Gemini Nano is reading on your device…' : 'Scanning…'}
+                  <Spinner /> {nano.ready ? 'Gemini Nano is reading on your device…' : 'Scanning…'} {elapsed > 2 && `${elapsed} s`}
                 </>
               ) : (
                 'Find personal details 🔒'
@@ -369,7 +379,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             <button className="primary" onClick={send} disabled={!canSend}>
               {busy === 'send' ? (
                 <>
-                  <Spinner /> {task.route === 'cloud' ? 'Waiting for the cloud…' : 'Working…'}
+                  <Spinner /> {task.route === 'cloud' ? 'Waiting for the cloud…' : 'Working…'} {elapsed > 2 && `${elapsed} s`}
                 </>
               ) : task.route === 'cloud' ? 'Send through the airlock ☁️' : 'Summarise 🔒'}
             </button>

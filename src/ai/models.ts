@@ -25,17 +25,20 @@ export interface RunResult {
 }
 
 const cache = new Map<string, GenerativeModel>();
+export const CLOUD_TIMEOUT_MS = 90_000;
 
 export function getModel(route: Route, onDeviceParams?: OnDeviceParams): GenerativeModel {
   if (!firebase) throw new Error('Firebase is not configured. Fill in .env.local (see .env.example).');
   const key = `${route}:${cloudModel()}:${onDeviceParams ? JSON.stringify(onDeviceParams) : ''}`;
   let model = cache.get(key);
   if (!model) {
-    model = getGenerativeModel(firebase.ai, {
-      mode: MODE[route],
-      inCloudParams: { model: cloudModel() },
-      onDeviceParams,
-    });
+    model = getGenerativeModel(
+      firebase.ai,
+      { mode: MODE[route], inCloudParams: { model: cloudModel() }, onDeviceParams },
+      // Fail in 90 s rather than the SDK's default 180 s: answers normally take a few seconds,
+      // and a stuck request is worse for the user than a clear "try again".
+      { timeout: CLOUD_TIMEOUT_MS },
+    );
     cache.set(key, model);
   }
   return model;

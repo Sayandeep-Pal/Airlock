@@ -8,11 +8,11 @@ Paste each section into the matching Devpost field. Fill in the `TODO` items bef
 - **Built with:** firebase-ai-logic, gemini-nano, gemini, firebase-app-check, firebase-remote-config, firebase-hosting, chrome-prompt-api, react, typescript, vite, pdf.js, vitest
 - **Links:**
   - Repo: https://github.com/Sayandeep-Pal/Airlock
-  - Live demo: `TODO`
+  - Live demo: https://airlock-b789e.web.app
   - Video: `TODO`
 - **Images:**
   - Cover image: `docs/screenshots/2-review.png`
-  - Gallery: `1-input`, `2-review`, an answer screenshot (`TODO`: capture one with a real cloud answer), `4-safe-mode`, `5-phone`
+  - Gallery: `1-input`, `2-review`, `3-answer` (a real cloud answer), `4-safe-mode`, `5-phone`
 
 ---
 

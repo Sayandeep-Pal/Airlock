@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { detectPatterns } from '../redact/patterns';
 import { redact, restore } from '../redact/vault';
-import { activeSpans, findPhrase, outgoingLeaks, spanKey, tokensIn, unknownTokens } from './logic';
+import { activeSpans, findPhrase, friendlyCloudError, outgoingLeaks, spanKey, tokensIn, unknownTokens } from './logic';
 import { parseInline, parseMarkdown } from './markdown';
 import { buildTaskPrompt, taskById } from './tasks';
 
@@ -89,5 +89,16 @@ describe('markdown', () => {
     expect(blocks.map((b) => b.kind)).toEqual(['heading', 'p', 'ul', 'ol', 'p']);
     expect(blocks[1]).toEqual({ kind: 'p', inlines: [{ kind: 'text', text: 'Line one line two' }] });
     expect(blocks[3]).toMatchObject({ kind: 'ol', items: [[{ text: 'x' }], [{ text: 'y' }]] });
+  });
+});
+
+describe('friendlyCloudError', () => {
+  it('explains common cloud failures in plain language', () => {
+    expect(friendlyCloudError('anything', false)).toMatch(/offline/);
+    expect(friendlyCloudError('[503 ] Deadline expired before operation could complete.', true)).toMatch(/busy or didn't answer in time/);
+    expect(friendlyCloudError('Timeout has expired.', true)).toMatch(/busy or didn't answer in time/);
+    expect(friendlyCloudError('[429 ] Resource exhausted', true)).toMatch(/rate-limited/);
+    expect(friendlyCloudError('[401 ] Firebase App Check token is invalid.', true)).toMatch(/App Check/);
+    expect(friendlyCloudError('Something odd', true)).toBe('The cloud request failed: Something odd');
   });
 });

@@ -25,9 +25,9 @@
 | Product-quality UI (lab moves to an "Under the hood" tab) | ✅ Done: how-it-works strip, "How to try it" box, footer, favicon, spinners, copy button, inline keyboard-accessible highlights |
 | PDF upload, ready-made tasks, "Try a sample" | ✅ Done: pdf.js on-device, drag-and-drop, bundled synthetic sample PDF; browser-tested |
 | Remote Config, date-blurring option | ✅ Done: `cloud_model` parameter (optional; default from env); "Send dates as month & year" switch |
-| Production deploy (Hosting, reCAPTCHA Enterprise, App Check enforced) | 🟨 Config ready (`firebase.json` with security headers); **needs the user**: `firebase login`, reCAPTCHA key, deploy, enforce |
+| Production deploy (Hosting, reCAPTCHA Enterprise, App Check enforced) | ✅ Live at https://airlock-b789e.web.app with reCAPTCHA Enterprise App Check; enforcement confirmed (calls without a token get 401) |
 | README, architecture diagram, demo video script, Devpost write-up | ✅ Written: [README.md](README.md), [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md), [docs/DEVPOST.md](docs/DEVPOST.md). **User still records the video** |
-| Real cloud answers (quality, latency, placeholder handling) | ⬜ **Needs the user's browser** (its App Check debug token is registered) |
+| Real cloud answers (quality, latency, placeholder handling) | ✅ Tested on the live site: 2–5 s per answer with `gemini-3.5-flash-lite`, placeholders kept, none invented, 0 personal details in 3 real requests |
 
 ---
 
@@ -195,36 +195,42 @@ All of these are browser-tested with real Nano; see the third round above.
   - footer, favicon, spinners, "Copy answer", disclaimer
 - **Hosting:** security headers in `firebase.json` (`nosniff`, `strict-origin-when-cross-origin`, `X-Frame-Options DENY`, `Permissions-Policy`), immutable caching for `/assets`, and a JS content type for `.mjs`.
 
-### 2. Needs the user (can't be done from Claude's side)
-1. **Real cloud answers.** In the user's own Chrome, whose debug token is registered, run `npm run dev`. Try the hospital sample and the sample PDF with **Explain it**, **What should I do?** and **Draft a reply**. Check:
-   - **answer quality**
-   - **latency:** one early call took 178 s; if it stays slow, check the thinking settings or the model
-   - **that placeholders are kept:** watch for the "invented placeholder" warning
-   - **Then:** capture an answer screenshot as `docs/screenshots/3-answer.png` and add it to the README table.
-2. **Production deploy:**
-   1. `npx firebase login`, then `npx firebase use --add` and pick the project.
-   2. Create a **reCAPTCHA Enterprise** key with the domains `localhost`, `<id>.web.app` and `<id>.firebaseapp.com`.
-   3. Register it in App Check for the web app.
-   4. Put the site key in `.env.local` as `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`. Production builds ignore the debug token: `env.DEV` is false.
-   5. `npm run deploy`, then test the live URL in a normal and a no-Nano browser.
-   6. **Enforce** App Check for AI Logic in the console.
-   7. Put the live link in the README ("Live demo") and in `docs/DEVPOST.md`.
-3. **Optional:** in Remote Config, add a string parameter `cloud_model` and publish it.
-4. **Confirm the cloud model ID** against the Firebase AI Logic models page. `gemini-3.8-flash` works, but came from conflicting docs.
-5. **Delete the stray `pnpm-lock.yaml` and `pnpm-workspace.yaml`.** They are untracked. npm is the package manager, with `package-lock.json` and a clean `npm ci`. Claude's attempt to delete them was blocked by the permission check.
-6. **Record the demo video** following [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Upload it to YouTube as public, 3 minutes or less, and add the link.
-7. **Submit on Devpost** using [docs/DEVPOST.md](docs/DEVPOST.md). Fill in its `TODO` items.
-8. **`git push`** to `Sayandeep-Pal/Airlock`.
+### 2. Deploy and real cloud test ✅
+The Firebase CLI is logged in on the user's account, so Claude can run `firebase` commands, but should still ask before public changes.
+- **`.firebaserc`** points at `airlock-b789e`.
+- **Hosting:** `npm run deploy` serves the site at https://airlock-b789e.web.app with the security headers.
+- **Remote Config:** `remoteconfig.template.json` holds `cloud_model = gemini-3.5-flash-lite`. Publish it with `npx firebase deploy --only remoteconfig`. Production clients cache it for 1 hour.
+- **App Check:** reCAPTCHA Enterprise in production is confirmed working. The server rejects calls without a token (401 in about 1 s), so enforcement is on.
+- **Cloud model findings:**
+  - `gemini-3.8-flash` returned `503 "Deadline expired before operation could complete"` after exactly 180 s for this project, with or without `thinkingLevel: LOW`. That explains the early 178 s call.
+  - `gemini-2.5-flash` returns 404: "no longer available to new users".
+  - `gemini-3.7-flash` returns 500.
+  - `gemini-3.5-flash` works in ~25 s, because it thinks first.
+  - **`gemini-3.5-flash-lite` works in 2–5 s with good answers. Chosen by the user.**
+  - To re-test a model: `scripts/capture.cjs` grabs one real request (with its App Check token) from the live site, then `PROMPT_FILE=… node scripts/replay.cjs default <model> <ms>` replays it.
+- **Cloud prompt fix:** the model used to tell readers to contact the hospital at the *patient's own* phone and email (3 of 3 runs). Two rules in `buildTaskPrompt` fixed it (5 of 5): details in the reader's block belong to the reader, and only give an organisation's number if the document says it is theirs.
+- **App changes:**
+  - cloud calls time out at 90 s (`CLOUD_TIMEOUT_MS`) instead of 180 s
+  - `friendlyCloudError` turns 503, 429, App Check and network errors into plain advice
+  - a seconds counter shows while waiting
+- **Live test** (`scripts/live.cjs`, real cloud): Explain, Next steps and Reply on the sample PDF. All answered in the cloud in 2–5 s, used only placeholders, invented none, and the 3 requests carried 0 labelled personal details.
 
-### 3. Optional improvements if time allows
-- **Cloud prompt tuning** after seeing real answers, for example how dates and amounts are referred to.
+### 3. Still needs the user
+1. **Delete the stray `pnpm-lock.yaml` and `pnpm-workspace.yaml`.** They are untracked; npm is the package manager. Claude's delete was blocked by the permission check.
+2. **Record the demo video** following [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Upload it to YouTube as public, 3 minutes or less, and add the link to `docs/DEVPOST.md`.
+3. **Submit on Devpost** using [docs/DEVPOST.md](docs/DEVPOST.md). Only the video link is still `TODO`.
+4. **`git push`** to `Sayandeep-Pal/Airlock`. Claude can do this when asked.
+5. **Optional:** run `npx firebase logout` when Claude no longer needs Firebase access.
+
+### 4. Optional improvements if time allows
+- **Re-test `gemini-3.8-flash` occasionally.** If Google fixes the 503, consider it for better answers; switching is a Remote Config change only.
 - **More samples** for other countries' ID formats.
 - **Persist a "remember my choice" for date blurring** in `localStorage`. Keep it a per-browser convenience only.
 - **A Chrome extension version** (stretch).
 
 ### Testing notes
 - **Unit tests:** `npm test` from PowerShell or cmd; 55 tests.
-- **Browser e2e:** the scripts live in the session scratchpad, not the repo: `scripts/e2e.cjs` (53 checks) and `scripts/score.cjs` (in-app Nano scoring).
+- **Browser e2e:** the scripts live in the session scratchpad, not the repo: `scripts/e2e.cjs` (53 checks), `scripts/score.cjs` (in-app Nano scoring), `scripts/live.cjs` (real cloud on the live site), `scripts/capture.cjs` + `scripts/replay.cjs` (model latency probes).
   - Start Vite on port 5199 first: `npx vite --port 5199 --strictPort`.
   - Stop any leftover Vite process on that port.
   - If the scratchpad is gone, recreate them as described in section 0.
@@ -248,8 +254,8 @@ See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md): 2:50, with timestamps, narration
 - [x] Real AI calls through Firebase AI Logic
 - [x] Setup and run instructions final in the README (add the live link after deploy)
 - [x] App Check integrated (debug token in dev)
-- [ ] App Check in production mode and enforced
+- [x] App Check in production mode and enforced
 - [x] English UI and English project description, including the hybrid design ([docs/DEVPOST.md](docs/DEVPOST.md))
 - [ ] Public YouTube demo, 3 minutes or less
-- [ ] Live deployed link
+- [x] Live deployed link: https://airlock-b789e.web.app
 - [x] No secrets or real personal data in the code or demo so far

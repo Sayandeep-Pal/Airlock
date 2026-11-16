@@ -11,11 +11,13 @@ Airlock lets you get AI help with sensitive documents, like a hospital bill, a l
 
 The split between device and cloud isn't a fallback: **it is the privacy feature.**
 
+**Try it live: https://airlock-b789e.web.app**
+
 Built for [#BuildHybridAI 2026](https://firebasehybridaihackathon.devpost.com/) with the **Firebase AI Logic hybrid inference SDK** (`firebase/ai`).
 
-| Paste or open a PDF | Review what leaves the device |
-|---|---|
-| ![Input screen](docs/screenshots/1-input.png) | ![Review screen](docs/screenshots/2-review.png) |
+| Paste or open a PDF | Review what leaves the device | Answer, restored on-device |
+|---|---|---|
+| ![Input screen](docs/screenshots/1-input.png) | ![Review screen](docs/screenshots/2-review.png) | ![Answer screen](docs/screenshots/3-answer.png) |
 
 ---
 
@@ -93,7 +95,7 @@ A set of **20 synthetic documents** (medical, legal, tax, HR, housing, insurance
 
 ## Try it
 
-**Live demo:** _link added after deploy_
+**Live demo:** https://airlock-b789e.web.app
 
 - **With Gemini Nano (full hybrid):** use desktop Chrome.
   1. Open `chrome://flags/#prompt-api-for-gemini-nano`, set it to **Enabled**, and restart Chrome.
@@ -125,7 +127,7 @@ Requirements: Node 20+, a Firebase project, and desktop Chrome for Gemini Nano.
    ```
 4. **Tests:** `npm test` runs the unit tests, covering detection, the vault, the airlock check, the PDF text joining and the evaluation set.
 
-**Optional: Remote Config.** Add a string parameter `cloud_model`, for example `gemini-3.8-flash`, to switch the cloud model without a redeploy. Without it, `VITE_CLOUD_MODEL` is used. "Under the hood" shows which one is active.
+**Optional: Remote Config.** Add a string parameter `cloud_model`, for example `gemini-3.5-flash-lite` (the default), to switch the cloud model without a redeploy. Without it, `VITE_CLOUD_MODEL` is used. "Under the hood" shows which one is active.
 
 ### Deploy to Firebase Hosting
 

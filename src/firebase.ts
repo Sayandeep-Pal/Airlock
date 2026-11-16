@@ -13,7 +13,7 @@ const firebaseConfig = {
 };
 
 /** Fallback cloud model; Remote Config's `cloud_model` parameter overrides it without a redeploy. */
-export const DEFAULT_CLOUD_MODEL: string = env.VITE_CLOUD_MODEL || 'gemini-3.8-flash';
+export const DEFAULT_CLOUD_MODEL: string = env.VITE_CLOUD_MODEL || 'gemini-3.5-flash-lite';
 
 export type AppCheckMode = 'recaptcha-enterprise' | 'debug-token' | 'off';
 
