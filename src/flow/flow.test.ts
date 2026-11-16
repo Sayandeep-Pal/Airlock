@@ -84,6 +84,11 @@ describe('markdown', () => {
   it('leaves placeholders and lone asterisks alone', () => {
     expect(parseInline('Pay [ORG_1] 5 * 3')).toEqual([{ kind: 'text', text: 'Pay [ORG_1] 5 * 3' }]);
   });
+  it('never italicises between two placeholders on one line', () => {
+    const line = 'From [ORG_1] about your stay under Dr. [PERSON_2].';
+    expect(parseInline(line)).toEqual([{ kind: 'text', text: line }]);
+    expect(parseInline('a _b_ c')[1]).toEqual({ kind: 'italic', text: 'b' });
+  });
   it('parses headings, lists and paragraphs', () => {
     const blocks = parseMarkdown('## Title\nLine one\nline two\n\n- a\n- b\n1. x\n2) y\n\nEnd');
     expect(blocks.map((b) => b.kind)).toEqual(['heading', 'p', 'ul', 'ol', 'p']);

@@ -12,7 +12,9 @@ export type Block =
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
-  const re = /\*\*(.+?)\*\*|__(.+?)__|`([^`]+)`|\*([^*\s][^*]*?)\*|_([^_\s][^_]*?)_/g;
+  // Underscores only mark emphasis at word boundaries (as in CommonMark), so placeholders
+  // like [ORG_1] … [PERSON_2] on the same line are never turned into italics.
+  const re = /\*\*(.+?)\*\*|(?<!\w)__(.+?)__(?!\w)|`([^`]+)`|\*([^*\s][^*]*?)\*|(?<!\w)_([^_\s][^_]*?)_(?!\w)/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index! > last) out.push({ kind: 'text', text: text.slice(last, m.index) });

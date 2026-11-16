@@ -4,3 +4,6 @@ dist/
 .env.*.local
 .firebase/
 *.log
+
+# Rendered demo video (upload to YouTube; too large for git)
+demo-video/
