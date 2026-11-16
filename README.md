@@ -147,7 +147,7 @@ npm run deploy                  # builds, then deploys dist/ to Hosting
 - **The airlock check runs on the full prompt**, not just the document, and blocks sending if a hidden value reappears anywhere.
 - **The cloud prompt fences the document as data** and tells the model to ignore instructions inside it. It also tells the model never to guess what's behind a placeholder. Placeholders the model invents are flagged and left as they are.
 - **The answer is rendered by a small Markdown parser into React elements.** There is no `innerHTML` anywhere.
-- **Hosting sends security headers:** `nosniff`, `no-referrer`, `DENY` framing and a restrictive `Permissions-Policy`.
+- **Hosting sends security headers:** `nosniff`, `strict-origin-when-cross-origin` referrers, `DENY` framing and a restrictive `Permissions-Policy`.
 
 ## Known limitations
 

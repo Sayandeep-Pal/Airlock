@@ -1,0 +1,9 @@
+{
+  "parameters": {
+    "cloud_model": {
+      "defaultValue": { "value": "gemini-3.8-flash" },
+      "description": "Gemini model used for ONLY_IN_CLOUD reasoning over redacted text. Change it here to switch models without a redeploy.",
+      "valueType": "STRING"
+    }
+  }
+}

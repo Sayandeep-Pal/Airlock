@@ -193,7 +193,7 @@ All of these are browser-tested with real Nano; see the third round above.
 - **UI polish:**
   - `HowItWorks` and `TryItBox` in [src/components/HowItWorks.tsx](src/components/HowItWorks.tsx)
   - footer, favicon, spinners, "Copy answer", disclaimer
-- **Hosting:** security headers in `firebase.json` (`nosniff`, `no-referrer`, `X-Frame-Options DENY`, `Permissions-Policy`), immutable caching for `/assets`, and a JS content type for `.mjs`.
+- **Hosting:** security headers in `firebase.json` (`nosniff`, `strict-origin-when-cross-origin`, `X-Frame-Options DENY`, `Permissions-Policy`), immutable caching for `/assets`, and a JS content type for `.mjs`.
 
 ### 2. Needs the user (can't be done from Claude's side)
 1. **Real cloud answers.** In the user's own Chrome, whose debug token is registered, run `npm run dev`. Try the hospital sample and the sample PDF with **Explain it**, **What should I do?** and **Draft a reply**. Check:
