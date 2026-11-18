@@ -1,3 +1,4 @@
+import { Icon } from '../components/Icon';
 import type { TrustEntry } from './logic';
 import { taskById } from './tasks';
 
@@ -9,7 +10,7 @@ export function TrustLog({ entries }: { entries: TrustEntry[] }) {
     <section className="card trust">
       <details>
         <summary>
-          <strong>Trust log</strong>{' '}
+          <strong><Icon name="log" size={15} /> Trust log</strong>{' '}
           <span className="muted">
             {entries.length === 0
               ? '· nothing has left this device yet'
@@ -23,7 +24,7 @@ export function TrustLog({ entries }: { entries: TrustEntry[] }) {
         {entries.map((e, i) => (
           <details key={i} className="entry">
             <summary>
-              {e.at.toLocaleTimeString()} · {taskById(e.task).label} · ☁️ cloud · {e.chars.toLocaleString()} chars · {e.tokens} placeholder(s)
+              {e.at.toLocaleTimeString()} · {taskById(e.task).label} · cloud · {e.chars.toLocaleString()} chars · {e.tokens} placeholder(s)
               {e.revealed > 0 && ` · ${e.revealed} revealed by you`}
             </summary>
             <pre>{e.sent}</pre>

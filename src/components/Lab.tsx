@@ -4,6 +4,7 @@ import { NANO_HELP } from '../ai/nano';
 import { cloudModel, cloudModelFrom, configReady, firebase } from '../firebase';
 import type { NanoState } from '../flow/useNano';
 import { EvalPanel } from './EvalPanel';
+import { WhereBadge } from './Icon';
 import { RedactionPanel } from './RedactionPanel';
 
 const ROUTES: { route: Route; label: string; note: string }[] = [
@@ -76,15 +77,15 @@ export function Lab({ nano }: { nano: NanoState }) {
             const o = outcomes[route];
             return (
               <div key={route} className="route">
-                <button onClick={() => runRoute(route)} disabled={!firebase || busy !== null || !prompt.trim()}>
+                <button className="secondary" onClick={() => runRoute(route)} disabled={!firebase || busy !== null || !prompt.trim()}>
                   {busy === route ? 'Running…' : label}
                 </button>
                 <small className="muted">{note}{route === 'cloud' && ` · ${model.name}`}</small>
                 {o?.ok && (
                   <div className="result">
-                    <span className={`badge ${o.result.where}`}>
-                      {o.result.where === 'on_device' ? '🔒 on-device' : '☁️ cloud'} · {o.result.ms} ms
-                    </span>
+                    <WhereBadge where={o.result.where}>
+                      {o.result.where === 'on_device' ? 'on-device' : 'cloud'} · {o.result.ms} ms
+                    </WhereBadge>
                     <p>{o.result.text}</p>
                   </div>
                 )}

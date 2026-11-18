@@ -42,10 +42,10 @@ export function EvalPanel({ nanoReady }: { nanoReady: boolean }) {
         anything leaves the device.
       </p>
       <div className="toolbar">
-        <button onClick={() => evaluate(false)} disabled={progress !== null && !progress.startsWith('Nano errors')}>
+        <button className="secondary" onClick={() => evaluate(false)} disabled={progress !== null && !progress.startsWith('Nano errors')}>
           Score patterns only
         </button>
-        <button onClick={() => evaluate(true)} disabled={!nanoReady || (progress !== null && !progress.startsWith('Nano errors'))}>
+        <button className="secondary" onClick={() => evaluate(true)} disabled={!nanoReady || (progress !== null && !progress.startsWith('Nano errors'))}>
           Score patterns + Nano
         </button>
         {progress && <span className="muted">{progress}</span>}

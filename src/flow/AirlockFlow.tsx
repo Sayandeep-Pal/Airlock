@@ -3,6 +3,7 @@ import { run, type Where } from '../ai/models';
 import { promptNanoForJson } from '../ai/nanoPrompt';
 import { Highlighted } from '../components/Highlighted';
 import { HowItWorks, TryItBox } from '../components/HowItWorks';
+import { Icon, TokenText, WhereBadge } from '../components/Icon';
 import { Markdown } from '../components/Markdown';
 import { DATASET } from '../eval/dataset';
 import { firebase } from '../firebase';
@@ -210,7 +211,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
       <ol className="stepper" aria-label="Progress">
         {STEPS.map((s, i) => (
           <li key={s.stage} className={i < stageIndex ? 'done' : i === stageIndex ? 'current' : ''} aria-current={i === stageIndex ? 'step' : undefined}>
-            <span className="dot">{i < stageIndex ? '✓' : i + 1}</span>
+            <span className="dot">{i < stageIndex ? <Icon name="check" size={12} /> : `0${i + 1}`}</span>
             {s.label}
           </li>
         ))}
@@ -218,13 +219,23 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
 
       {/* ---------------- 1. Document ---------------- */}
       {stage === 'input' && (
-        <section className="card">
-          <h2>Paste a document you'd rather not share</h2>
-          <p className="muted">
-            A medical report, a legal notice, a tax letter… Airlock finds the personal details <strong>on your device</strong> before
-            anything goes to the cloud. Use made-up data while testing.
+        <>
+        <section className="hero">
+          <p className="eyebrow">Private AI help for sensitive documents</p>
+          <h1 className="display">
+            Get help with the document.
+            <br />
+            <em>Keep yourself out of it.</em>
+          </h1>
+          <p className="lede">
+            A medical bill, a legal notice, a tax letter. Airlock finds your personal details <strong>on your device</strong> before
+            anything goes to the cloud, then puts them back into the answer.
           </p>
           <HowItWorks />
+        </section>
+        <section className="card">
+          <h2>Paste a document you'd rather not share</h2>
+          <p className="muted">Use made-up data while testing.</p>
           <div className="toolbar">
             <select value="" onChange={(e) => e.target.value && reset(DATASET.find((d) => d.id === e.target.value)!.text)} aria-label="Try a sample">
               <option value="">Try a sample…</option>
@@ -240,7 +251,9 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
                   <Spinner /> Reading…
                 </>
               ) : (
-                '📄 Open a PDF or text file'
+                <>
+                  <Icon name="file" /> Open a PDF or text file
+                </>
               )}
             </button>
             <button className="link" onClick={openSamplePdf} disabled={busy !== null}>
@@ -283,20 +296,23 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
                   <Spinner /> {nano.ready ? 'Gemini Nano is reading on your device…' : 'Scanning…'} {elapsed > 2 && `${elapsed} s`}
                 </>
               ) : (
-                'Find personal details 🔒'
+                <>
+                  Find personal details <Icon name="scan" />
+                </>
               )}
             </button>
           </div>
           {error && <p className="error">{error}</p>}
           <TryItBox nano={nano} />
         </section>
+        </>
       )}
 
       {/* ---------------- 2. Review & send ---------------- */}
       {stage === 'review' && detection && (
         <section className="card">
           <h2>
-            Review what stays private <span className="badge on_device">🔒 on-device · {detection.ms} ms</span>
+            Review what stays private <WhereBadge where="on_device">on-device · {detection.ms} ms</WhereBadge>
           </h2>
 
           {safeMode ? (
@@ -308,9 +324,15 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
           ) : (
             <p className="muted">
               Gemini Nano found {counts.nano}, pattern rules found {counts.pattern}
-              {counts.manual > 0 && `, you marked ${counts.manual}`}. Click any highlighted item to reveal or hide it.
+              {counts.manual > 0 && `, you marked ${counts.manual}`}. Click any marked item to reveal or hide it.
             </p>
           )}
+          <p className="legend" aria-hidden="true">
+            <span><mark className="pii nano">Gemini Nano</mark></span>
+            <span><mark className="pii pattern">Pattern rule</mark></span>
+            <span><mark className="pii manual">Added by you</mark></span>
+            <span><mark className="pii revealed">Revealed</mark></span>
+          </p>
 
           <div className="split">
             <div>
@@ -331,7 +353,9 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             </div>
             <div>
               <h3>What will leave your device</h3>
-              <pre className="outgoing">{redacted}</pre>
+              <pre className="outgoing">
+                <TokenText text={redacted} />
+              </pre>
               {hasDates && (
                 <label className="switch">
                   <input type="checkbox" checked={blurDates} onChange={(e) => setBlurDates(e.target.checked)} />
@@ -341,11 +365,11 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
               <p className={leaks.length ? 'airlock blocked' : 'airlock clear'} role="status">
                 {leaks.length === 0 ? (
                   <>
-                    ✅ Airlock check passed · {spans.length} item(s) hidden · {redacted.length} characters
+                    <Icon name="shield" /> Airlock check passed · {spans.length} item(s) hidden · {redacted.length} characters
                     {revealedValues.length > 0 && ` · ${revealedValues.length} revealed by you`}
                   </>
                 ) : (
-                  <>⛔ Airlock blocked: {leaks.map((l) => `${l.type} "${l.value}"`).join(', ')} would leak.</>
+                  <><Icon name="alert" /> Airlock blocked: {leaks.map((l) => `${l.type} "${l.value}"`).join(', ')} would leak.</>
                 )}
               </p>
             </div>
@@ -358,9 +382,9 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
                 <input type="radio" name="task" value={t.id} checked={taskId === t.id} onChange={() => setTaskId(t.id)} />
                 <strong>{t.label}</strong>
                 <span className="muted">{t.hint}</span>
-                <span className={`badge ${t.route !== 'cloud' && nano.ready ? 'on_device' : 'in_cloud'}`}>
-                  {t.route === 'cloud' ? '☁️ cloud' : nano.ready ? '🔒 on-device' : '☁️ cloud (no Nano)'}
-                </span>
+                <WhereBadge where={t.route !== 'cloud' && nano.ready ? 'on_device' : 'in_cloud'}>
+                  {t.route === 'cloud' ? 'cloud' : nano.ready ? 'on-device' : 'cloud (no Nano)'}
+                </WhereBadge>
               </label>
             ))}
           </div>
@@ -374,14 +398,22 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
 
           <div className="actions">
             <button className="secondary" onClick={() => setStage('input')} disabled={busy !== null}>
-              ← Edit document
+              <Icon name="back" /> Edit document
             </button>
             <button className="primary" onClick={send} disabled={!canSend}>
               {busy === 'send' ? (
                 <>
                   <Spinner /> {task.route === 'cloud' ? 'Waiting for the cloud…' : 'Working…'} {elapsed > 2 && `${elapsed} s`}
                 </>
-              ) : task.route === 'cloud' ? 'Send through the airlock ☁️' : 'Summarise 🔒'}
+              ) : task.route === 'cloud' ? (
+                <>
+                  Send through the airlock <Icon name="arrow" />
+                </>
+              ) : (
+                <>
+                  Summarise <Icon name="device" />
+                </>
+              )}
             </button>
           </div>
           {error && <p className="error">{error}</p>}
@@ -393,9 +425,9 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
         <section className="card">
           <h2>
             {taskById(answer.task).label}{' '}
-            <span className={`badge ${answer.where}`}>
-              {answer.where === 'on_device' ? '🔒 answered on-device' : '☁️ answered in the cloud'} · {(answer.ms / 1000).toFixed(1)} s
-            </span>
+            <WhereBadge where={answer.where}>
+              {answer.where === 'on_device' ? 'answered on-device' : 'answered in the cloud'} · {(answer.ms / 1000).toFixed(1)} s
+            </WhereBadge>
           </h2>
           <p className="muted">
             {answer.where === 'in_cloud' ? 'The cloud only saw placeholders. ' : 'Nothing left your device. '}
@@ -407,7 +439,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
               Show what the {answer.where === 'in_cloud' ? 'cloud' : 'model'} actually saw
             </label>
             <button className="secondary" onClick={copyAnswer}>
-              {copied ? '✓ Copied' : 'Copy answer'}
+              <Icon name={copied ? 'check' : 'copy'} /> {copied ? 'Copied' : 'Copy answer'}
             </button>
           </div>
           <div className="answer">
@@ -418,7 +450,7 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
           )}
           <div className="actions">
             <button className="secondary" onClick={() => setStage('review')}>
-              ← Ask something else
+              <Icon name="back" /> Ask something else
             </button>
             <button className="secondary" onClick={() => reset()}>
               New document
@@ -440,7 +472,7 @@ function NanoNotice({ nano }: { nano: NanoState }) {
   if (nano.ready)
     return (
       <p className="muted">
-        🔒 Gemini Nano is ready on this device{nano.progress !== null ? ` · loading ${Math.round(nano.progress * 100)}%` : nano.warm ? ' and warmed up' : ''}.
+        <Icon name="device" size={13} /> Gemini Nano is ready on this device{nano.progress !== null ? ` · loading ${Math.round(nano.progress * 100)}%` : nano.warm ? ' and warmed up' : ''}.
       </p>
     );
   if (nano.status === 'downloadable' || nano.status === 'downloading')

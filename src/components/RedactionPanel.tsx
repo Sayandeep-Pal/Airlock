@@ -5,6 +5,7 @@ import { detectPatterns } from '../redact/patterns';
 import { findLeaks, redact } from '../redact/vault';
 import { DATASET } from '../eval/dataset';
 import { Highlighted } from './Highlighted';
+import { TokenText, WhereBadge } from './Icon';
 
 export function RedactionPanel({ nanoReady }: { nanoReady: boolean }) {
   const [doc, setDoc] = useState(DATASET[0].text);
@@ -35,7 +36,7 @@ export function RedactionPanel({ nanoReady }: { nanoReady: boolean }) {
   return (
     <section className="card">
       <h2>
-        Redaction <span className="badge on_device">🔒 on-device</span>
+        Redaction <WhereBadge where="on_device">on-device</WhereBadge>
       </h2>
       <p className="muted">
         Synthetic data only. <mark className="pii pattern">Patterns</mark> run as you type;{' '}
@@ -76,7 +77,9 @@ export function RedactionPanel({ nanoReady }: { nanoReady: boolean }) {
         </div>
         <div>
           <h3>What would leave the device</h3>
-          <pre>{preview.redacted}</pre>
+          <pre className="preview">
+            <TokenText text={preview.redacted} />
+          </pre>
         </div>
       </div>
       <p className="muted">
