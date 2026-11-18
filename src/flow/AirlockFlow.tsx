@@ -328,7 +328,11 @@ export function AirlockFlow({ nano }: { nano: NanoState }) {
             </p>
           )}
           <p className="legend" aria-hidden="true">
-            <span><mark className="pii nano">Gemini Nano</mark></span>
+            {!safeMode && (
+              <span>
+                <mark className="pii nano">Gemini Nano</mark>
+              </span>
+            )}
             <span><mark className="pii pattern">Pattern rule</mark></span>
             <span><mark className="pii manual">Added by you</mark></span>
             <span><mark className="pii revealed">Revealed</mark></span>
